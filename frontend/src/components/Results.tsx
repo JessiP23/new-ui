@@ -1,9 +1,11 @@
 import { useResults } from "../hooks/useResults";
 
 export default function Results() {
-  const { evaluations, filters, setFilters, loading, error } = useResults();
+  const { evaluations, filters, setFilters, loading, error, total } = useResults();
 
   const passRate = evaluations.length ? (evaluations.filter(e => e.verdict === 'pass').length / evaluations.length * 100).toFixed(1) : 0;
+
+  const totalPages = Math.ceil(total / filters.limit);
 
   if (loading) return <p>Loading results...</p>;
   if (error) return <p>Error: {error}</p>;
@@ -12,16 +14,17 @@ export default function Results() {
     <div className="results-container">
       <h2>Results</h2>
       <div className="filters">
-        <select value={filters.verdict} onChange={e => setFilters({ ...filters, verdict: e.target.value })}>
+        <select value={filters.verdict} onChange={e => setFilters({ ...filters, verdict: e.target.value, page: 1 })}>
           <option value="">All Verdicts</option>
           <option value="pass">Pass</option>
           <option value="fail">Fail</option>
           <option value="inconclusive">Inconclusive</option>
         </select>
+        <input type="number" value={filters.limit} onChange={e => setFilters({ ...filters, limit: parseInt(e.target.value), page: 1 })} min="10" max="100" />
       </div>
-      <p>Pass Rate: {passRate}% of {evaluations.length} evaluations</p>
+      <p>Pass Rate: {passRate}% of {evaluations.length} evaluations (Total: {total})</p>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-600">
+        <table className="min-w-full divide-y divide-gray-600 table-auto">
           <thead className="bg-gray-700">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Submission</th>
@@ -45,6 +48,11 @@ export default function Results() {
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="pagination">
+        <button disabled={filters.page <= 1} onClick={() => setFilters({ ...filters, page: filters.page - 1 })}>Prev</button>
+        <span>Page {filters.page} of {totalPages}</span>
+        <button disabled={filters.page >= totalPages} onClick={() => setFilters({ ...filters, page: filters.page + 1 })}>Next</button>
       </div>
     </div>
   );

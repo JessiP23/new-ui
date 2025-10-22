@@ -7,10 +7,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from supabase import create_client, Client
-from groq import Groq
+from groq import AsyncGroq
 from app.models import Submission, Judge, Assignment
 from app.services.judge_service import run_single_judge
 from app.services.fingerprint_service import simhash, hamming_distance
+import asyncio
 
 load_dotenv()
 app = FastAPI()
@@ -24,7 +25,7 @@ app.add_middleware(
 )
 
 supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
 
 @app.get("/")
 def root():
@@ -104,36 +105,44 @@ def get_assignments(queue_id: str):
     return response.data
 
 @app.post("/run_judges")
-def run_judges(queue_id: str):
+async def run_judges(queue_id: str):
     subs = supabase.table('submissions').select('id').eq('queue_id', queue_id).execute()
     submission_ids = [s['id'] for s in subs.data]
     assigns = supabase.table('assignments').select('question_id, judge_id').eq('queue_id', queue_id).execute()
+    judges_resp = supabase.table('judges').select('*').execute()
+    judges = {j['id']: j for j in judges_resp.data}
 
+    tasks = []
     for sub_id in submission_ids:
         for assign in assigns.data:
-            run_single_judge(sub_id, assign['question_id'], str(assign['judge_id']), supabase, groq_client)
+            tasks.append(run_single_judge(sub_id, assign['question_id'], str(assign['judge_id']), supabase, groq_client, judges))
+    
+    results = await asyncio.gather(*tasks)
+    evaluations = [r for r in results if r is not None]
+    if evaluations:
+        supabase.table('evaluations').insert(evaluations).execute()
     return {"message": f"Evaluations completed for {len(submission_ids)} submissions and {len(assigns.data)} assignments"}
 
 @app.get("/evaluations")
-def get_evaluations(queue_id: str = None, judge_id: str = None, question_id: str = None, verdict: str = None):
+def get_evaluations(queue_id: str = None, judge_id: str = None, question_id: str = None, verdict: str = None, page: int = 1, limit: int = 50):
     try:
-        resp = supabase.table('evaluations').select('*').execute()
-        data = resp.data or []
+        query = supabase.table('evaluations').select('*', count='exact')
         if queue_id:
-            subs = supabase.table('submissions').select('id, queue_id').eq('queue_id', queue_id).execute()
-            submission_ids = [s['id'] for s in (subs.data or [])]
+            subs = supabase.table('submissions').select('id').eq('queue_id', queue_id).execute()
+            submission_ids = [s['id'] for s in subs.data]
             if not submission_ids:
-                return []
-            data = [e for e in data if e.get('submission_id') in submission_ids]
-
+                return {"evaluations": [], "total": 0}
+            query = query.in_('submission_id', submission_ids)
         if judge_id:
-            data = [e for e in data if str(e.get('judge_id')) == str(judge_id)]
+            query = query.eq('judge_id', judge_id)
         if question_id:
-            data = [e for e in data if e.get('question_id') == question_id]
+            query = query.eq('question_id', question_id)
         if verdict:
-            data = [e for e in data if e.get('verdict') == verdict]
-
-        return data
+            query = query.eq('verdict', verdict)
+        
+        offset = (page - 1) * limit
+        response = query.range(offset, offset + limit - 1).execute()
+        return {"evaluations": response.data, "total": response.count}
     except Exception as e:
         logging.error("Error fetching evaluations: %s", str(e))
         raise HTTPException(status_code=500, detail="Failed to fetch evaluations")

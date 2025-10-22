@@ -16,9 +16,10 @@ interface Evaluation {
 
 export const useResults = () => {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
-  const [filters, setFilters] = useState({ judge_id: '', question_id: '', verdict: '' });
+  const [filters, setFilters] = useState({ judge_id: '', question_id: '', verdict: '', page: 1, limit: 50 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     fetchEvaluations();
@@ -31,8 +32,11 @@ export const useResults = () => {
       if (filters.judge_id) params.append('judge_id', filters.judge_id);
       if (filters.question_id) params.append('question_id', filters.question_id);
       if (filters.verdict) params.append('verdict', filters.verdict);
+      params.append('page', filters.page.toString());
+      params.append('limit', filters.limit.toString());
       const response = await axios.get(`${API_BASE}/evaluations?${params}`);
-      setEvaluations(response.data);
+      setEvaluations(response.data.evaluations);
+      setTotal(response.data.total);
     } catch (err: any) {
       setError('Failed to fetch evaluations');
     } finally {
@@ -46,5 +50,6 @@ export const useResults = () => {
     setFilters,
     loading,
     error,
+    total,
   };
 };
