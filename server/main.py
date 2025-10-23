@@ -33,12 +33,17 @@ def root():
 
 @app.post("/upload")
 async def upload_submissions(data: List[dict]):
+    """
+    Bulk upload submissions. Use Supabase upsert to avoid per-record select/update loops.
+    Expect incoming items to conform to Submission model.
+    """
     if not data or not isinstance(data, list):
         raise HTTPException(status_code=400, detail="Must provide valid JSON array")
 
+    records = []
     for item in data:
         submission = Submission(**item)
-        record = {
+        records.append({
             'id': submission.id,
             'queue_id': submission.queueId,
             'labeling_task_id': submission.labelingTaskId,
@@ -47,24 +52,15 @@ async def upload_submissions(data: List[dict]):
                 'questions': [q.dict() for q in submission.questions],
                 'answers': {k: v for k, v in submission.answers.items()}
             })
-        }
-        try:
-            supabase.table('submissions').insert(record).execute()
-        except Exception as e:
-            msg = str(e)
-            if 'duplicate key' in msg or 'already exists' in msg or '23505' in msg:
-                try:
-                    supabase.table('submissions').update({
-                        'queue_id': submission.queueId,
-                        'labeling_task_id': submission.labelingTaskId,
-                        'created_at': submission.createdAt,
-                        'data': record['data']
-                    }).eq('id', submission.id).execute()
-                except Exception as ue:
-                    logging.error("Failed to update existing submission %s: %s", submission.id, str(ue))
-            else:
-                raise
-    return {"message": f"Uploaded {len(data)} submissions"}
+        })
+
+    try:
+        supabase.table('submissions').upsert(records, on_conflict='id').execute()
+    except Exception as e:
+        logging.error("Failed bulk upsert submissions: %s", str(e))
+        raise HTTPException(status_code=500, detail="Failed to upload submissions")
+
+    return {"message": f"Uploaded {len(records)} submissions"}
 
 @app.get("/judges")
 def get_judges():
@@ -106,22 +102,62 @@ def get_assignments(queue_id: str):
 
 @app.post("/run_judges")
 async def run_judges(queue_id: str):
-    subs = supabase.table('submissions').select('id').eq('queue_id', queue_id).execute()
-    submission_ids = [s['id'] for s in subs.data]
-    assigns = supabase.table('assignments').select('question_id, judge_id').eq('queue_id', queue_id).execute()
+    subs_resp = supabase.table('submissions').select('id,data').eq('queue_id', queue_id).execute()
+    submission_rows = subs_resp.data or []
+
+    if not submission_rows:
+        return {"message": "No submissions found for queue"}
+
+    assigns_resp = supabase.table('assignments').select('question_id, judge_id').eq('queue_id', queue_id).execute()
+    assigns = assigns_resp.data or []
+
     judges_resp = supabase.table('judges').select('*').execute()
-    judges = {j['id']: j for j in judges_resp.data}
+    judges = {j['id']: j for j in (judges_resp.data or [])}
+
+    submission_ids = [r['id'] for r in submission_rows]
+    existing_reason_hashes: dict = {}
+    if submission_ids:
+        CHUNK = 1000
+        for i in range(0, len(submission_ids), CHUNK):
+            chunk_ids = submission_ids[i:i+CHUNK]
+            existing = supabase.table('evaluations').select('question_id, judge_id, reasoning').in_('submission_id', chunk_ids).execute()
+            existing_data = existing.data or []
+            for e in existing_data:
+                key = (e['question_id'], e['judge_id'])
+                existing_reason_hashes.setdefault(key, []).append(simhash(e['reasoning']))
 
     tasks = []
-    for sub_id in submission_ids:
-        for assign in assigns.data:
-            tasks.append(run_single_judge(sub_id, assign['question_id'], str(assign['judge_id']), supabase, groq_client, judges))
-    
-    results = await asyncio.gather(*tasks)
-    evaluations = [r for r in results if r is not None]
+    CONCURRENCY = int(os.getenv('JUDGE_CONCURRENCY', '50'))
+    evaluations = []
+
+    async def run_chunk(chunk):
+        res = await asyncio.gather(*chunk)
+        for r in res:
+            if r:
+                evaluations.append(r)
+
+    for row in submission_rows:
+        sub_id = row['id']
+        try:
+            sub_data = json.loads(row['data'])
+        except Exception:
+            continue
+        for assign in assigns:
+            qid = assign['question_id']
+            jid = str(assign['judge_id'])
+            tasks.append(run_single_judge(sub_id, sub_data, qid, jid, existing_reason_hashes, groq_client, judges))
+
+    for i in range(0, len(tasks), CONCURRENCY):
+        chunk = tasks[i:i+CONCURRENCY]
+        await run_chunk(chunk)
+
     if evaluations:
-        supabase.table('evaluations').insert(evaluations).execute()
-    return {"message": f"Evaluations completed for {len(submission_ids)} submissions and {len(assigns.data)} assignments"}
+        try:
+            supabase.table('evaluations').insert(evaluations).execute()
+        except Exception as e:
+            logging.error("Failed to insert evaluations: %s", str(e))
+
+    return {"message": f"Evaluations completed for {len(submission_rows)} submissions and {len(assigns)} assignments"}
 
 @app.get("/evaluations")
 def get_evaluations(queue_id: str = None, judge_id: str = None, question_id: str = None, verdict: str = None, page: int = 1, limit: int = 50):

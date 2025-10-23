@@ -18,7 +18,7 @@ export default function Topbar() {
   };
 
   return (
-    <header className="w-full h-20 flex flex-col justify-center px-4 bg-white/2 backdrop-blur-sm border-b border-white/5">
+    <header className="w-full py-4 flex flex-col justify-center px-4 bg-white/2 backdrop-blur-sm border-b border-white/5">
       <div className="flex items-center justify-between mb-2">
         <div className="text-lg font-semibold text-indigo-600">AI Judge</div>
         <div className="text-sm text-gray-400">Fast, simple evaluations</div>
