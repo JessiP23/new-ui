@@ -14,24 +14,60 @@ interface Evaluation {
   judges?: { name: string };
 }
 
+interface Judge {
+  id: string;
+  name: string;
+}
+
 export const useResults = () => {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
-  const [filters, setFilters] = useState({ judge_id: '', question_id: '', verdict: '', page: 1, limit: 50 });
+  const [filters, setFilters] = useState({ judge_ids: [] as string[], question_ids: [] as string[], verdict: '', page: 1, limit: 50, queue_id: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [total, setTotal] = useState(0);
+  const [judges, setJudges] = useState<Judge[]>([]);
+  const [questions, setQuestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetchJudges();
+  }, []);
+
+  useEffect(() => {
+    if (filters.queue_id) {
+      fetchQuestions();
+    }
+  }, [filters.queue_id]);
 
   useEffect(() => {
     fetchEvaluations();
   }, [filters]);
 
+  const fetchJudges = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/judges`);
+      setJudges(response.data);
+    } catch (err: any) {
+      console.error('Failed to fetch judges');
+    }
+  };
+
+  const fetchQuestions = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/questions?queue_id=${filters.queue_id}`);
+      setQuestions(response.data);
+    } catch (err: any) {
+      console.error('Failed to fetch questions');
+    }
+  };
+
   const fetchEvaluations = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filters.judge_id) params.append('judge_id', filters.judge_id);
-      if (filters.question_id) params.append('question_id', filters.question_id);
+      filters.judge_ids.forEach(id => params.append('judge_id', id));
+      filters.question_ids.forEach(id => params.append('question_id', id));
       if (filters.verdict) params.append('verdict', filters.verdict);
+      if (filters.queue_id) params.append('queue_id', filters.queue_id);
       params.append('page', filters.page.toString());
       params.append('limit', filters.limit.toString());
       const response = await axios.get(`${API_BASE}/evaluations?${params}`);
@@ -51,5 +87,7 @@ export const useResults = () => {
     loading,
     error,
     total,
+    judges,
+    questions,
   };
 };

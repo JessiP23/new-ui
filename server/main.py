@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from groq import AsyncGroq
+from openai import AsyncOpenAI
 from app.models import Submission, Judge, Assignment
 from app.services.judge_service import run_single_judge
 from app.services.fingerprint_service import simhash, hamming_distance
@@ -15,9 +16,15 @@ import asyncio
 import time
 from datetime import datetime
 from fastapi.responses import StreamingResponse
+from types import SimpleNamespace
 
 load_dotenv()
 app = FastAPI()
+
+UPLOAD_BATCH_SIZE = int(os.getenv("UPLOAD_BATCH_SIZE", "100"))
+RUN_JUDGES_PER_PAGE = 1000
+JOB_BATCH_SIZE = 500
+EVALUATIONS_PAGE_LIMIT = 50
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,8 +34,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY")) 
 groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY")) if AsyncOpenAI and os.getenv("OPENAI_API_KEY") else None
 
 @app.get("/")
 def root():
@@ -39,7 +47,6 @@ async def upload_submissions(data: List[dict]):
     if not data or not isinstance(data, list):
         raise HTTPException(status_code=400, detail="Must provide valid JSON array")
 
-    BATCH = 1000
     total = 0
     batch = []
 
@@ -81,7 +88,7 @@ async def upload_submissions(data: List[dict]):
 
     for item in data:
         batch.append(build_record(item))
-        if len(batch) >= BATCH:
+        if len(batch) >= UPLOAD_BATCH_SIZE:
             try:
                 resp = supabase.table('submissions').upsert(batch, on_conflict='id').execute()
                 uploaded = len(batch)
@@ -151,14 +158,12 @@ async def run_judges(queue_id: str):
         print('No assignments found for queue %s', queue_id)
         return {"message": "No assignments found for queue", "enqueued": 0}
 
-    per_page = 1000
-    offset = 0
     total_enqueued = 0
     jobs_batch = []
-    JOB_BATCH = 500
+    offset = 0
 
     while True:
-        subs_resp = supabase.table('submissions').select('id,data').eq('queue_id', queue_id).range(offset, offset + per_page - 1).execute()
+        subs_resp = supabase.table('submissions').select('id,data').eq('queue_id', queue_id).range(offset, offset + RUN_JUDGES_PER_PAGE - 1).execute()
         rows = subs_resp.data or []
         print('run_judges: fetched %s submissions at offset %s for queue %s', len(rows), offset, queue_id)
         if not rows:
@@ -197,7 +202,7 @@ async def run_judges(queue_id: str):
                     "created_at": datetime.utcnow().isoformat()
                 }
                 jobs_batch.append(job)
-                if len(jobs_batch) >= JOB_BATCH:
+                if len(jobs_batch) >= JOB_BATCH_SIZE:
                     try:
                         resp = supabase.table('judge_jobs').insert(jobs_batch).execute()
                         enq = len(jobs_batch)
@@ -208,7 +213,7 @@ async def run_judges(queue_id: str):
                         print("Failed inserting job batch: %s", str(e))
                         raise HTTPException(status_code=500, detail="Failed to enqueue jobs (batch)")
 
-        offset += per_page
+        offset += RUN_JUDGES_PER_PAGE
 
     if jobs_batch:
         try:
@@ -232,7 +237,7 @@ async def run_judges(queue_id: str):
     return {"message": "Jobs enqueued", "enqueued": total_enqueued, "submissions_count": subs_count, "assignments_count": assigns_count}
 
 @app.get("/evaluations")
-def get_evaluations(queue_id: str = None, judge_id: str = None, question_id: str = None, verdict: str = None, page: int = 1, limit: int = 50):
+def get_evaluations(queue_id: str = None, judge_id: str = None, question_id: str = None, verdict: str = None, page: int = 1, limit: int = EVALUATIONS_PAGE_LIMIT):
     try:
         query = supabase.table('evaluations').select('*', count='exact')
         if queue_id:
@@ -242,9 +247,11 @@ def get_evaluations(queue_id: str = None, judge_id: str = None, question_id: str
                 return {"evaluations": [], "total": 0}
             query = query.in_('submission_id', submission_ids)
         if judge_id:
-            query = query.eq('judge_id', judge_id)
+            judge_ids = judge_id.split(',') if ',' in judge_id else [judge_id]
+            query = query.in_('judge_id', judge_ids)
         if question_id:
-            query = query.eq('question_id', question_id)
+            question_ids = question_id.split(',') if ',' in question_id else [question_id]
+            query = query.in_('question_id', question_ids)
         if verdict:
             query = query.eq('verdict', verdict)
         

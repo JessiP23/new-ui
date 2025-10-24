@@ -4,25 +4,34 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
+from dotenv import load_dotenv
 from supabase import create_client
 from postgrest.exceptions import APIError
 from groq import AsyncGroq
+from openai import AsyncOpenAI
+import backoff
 from app.services.judge_service import run_single_judge
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-groq_client = AsyncGroq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+groq_client = AsyncGroq(api_key=GROQ_API_KEY)
+openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
-CONCURRENCY = int(os.getenv("WORKER_CONCURRENCY", "8"))
-BATCH = int(os.getenv("WORKER_BATCH", "50"))
-POLL_INTERVAL = float(os.getenv("WORKER_POLL_INTERVAL", "2.0"))
-MAX_ATTEMPTS = int(os.getenv("WORKER_MAX_ATTEMPTS", "3"))
+CONCURRENCY = 1
+BATCH = 10
+POLL_INTERVAL = 5.0
+MAX_ATTEMPTS = 3
+JUDGES_REFRESH = 60
 
-logging.basicConfig(level=logging.INFO)
+def should_retry(e):
+    err_str = str(e).lower()
+    return 'rate limit' in err_str or 'timeout' in err_str or '429' in err_str
 
+@backoff.on_exception(backoff.expo, Exception, max_tries=10, jitter=backoff.random_jitter, giveup=lambda e: not should_retry(e))
 async def process_job(job, judges_map):
     job_id = job['id']
     try:
@@ -31,7 +40,7 @@ async def process_job(job, judges_map):
         qid = job['question_id']
         jid = str(job['judge_id'])
 
-        eval_result = await run_single_judge(sub_id, sub_data, qid, jid, {}, groq_client, judges_map)
+        eval_result = await run_single_judge(sub_id, sub_data, qid, jid, {}, groq_client, openai_client, judges_map)
         if eval_result:
             eval_result.setdefault('queue_id', job.get('queue_id'))
             eval_result.setdefault('created_at', datetime.now(timezone.utc).isoformat())
@@ -66,6 +75,9 @@ async def process_job(job, judges_map):
     except Exception as e:
         logging.exception('Job failed %s', job_id)
         attempts = (job.get('attempts') or 0) + 1
+        backoff_seconds = min(60, 2 ** attempts) if 'rate limit' in str(e).lower() or 'timeout' in str(e).lower() else 0
+        if backoff_seconds > 0:
+            await asyncio.sleep(backoff_seconds)
         status = 'failed' if attempts >= MAX_ATTEMPTS else 'pending'
         supabase.table('judge_jobs').update({
             'status': status,

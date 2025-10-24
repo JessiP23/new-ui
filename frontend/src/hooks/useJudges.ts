@@ -9,6 +9,7 @@ interface Judge {
   system_prompt: string;
   model: string;
   active: boolean;
+  provider: string;
 }
 
 export const useJudges = () => {
