@@ -12,8 +12,8 @@ from openai import AsyncOpenAI
 import backoff
 from app.services.judge_service import run_single_judge
 
-SUPABASE_URL = os.getenv('SUPABASE_URL')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+SUPABASE_URL = os.getenv('GROQ_API_KEY')
+SUPABASE_KEY = os.getenv('SUPABASE_URL')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
@@ -118,6 +118,13 @@ async def worker_loop():
         except Exception:
             logging.exception('Worker loop exception; sleeping')
             await asyncio.sleep(POLL_INTERVAL)
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(worker_loop())
+        logging.info("Worker started")
+    except KeyboardInterrupt:
+        logging.info('Worker stopped by user')
 
 if __name__ == '__main__':
     try:

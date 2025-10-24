@@ -1,24 +1,24 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Layout from './components/Layout';
-import Upload from './components/Upload';
-import Judges from './components/Judges';
-import Queue from './components/Queue';
-import Results from './components/Results';
-import { WorkflowProvider } from './contexts/WorkflowContext';
+// REFACTORED by GPT-5 — optimized for clarity and performance
+// Purpose: Configures client-side routing and wires feature pages under the workflow context.
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { WorkflowProvider } from "./contexts/WorkflowContext";
+import { UploadPage } from "./features/upload/UploadPage";
+import { JudgesPage } from "./features/judges/JudgesPage";
+import { QueuePage } from "./features/queue/QueuePage";
+import { ResultsPage } from "./features/results/ResultsPage";
 
 function App() {
   return (
     <Router>
       <WorkflowProvider>
-        <Layout>
-          <Routes>
-            <Route path="/upload" element={<Upload />} />
-            <Route path="/judges" element={<Judges />} />
-            <Route path="/queue" element={<Queue />} />
-            <Route path="/results" element={<Results />} />
-            <Route path="/" element={<Upload />} />
-          </Routes>
-        </Layout>
+        <Routes>
+          <Route path="/upload" element={<UploadPage />} />
+          <Route path="/judges" element={<JudgesPage />} />
+          <Route path="/queue" element={<QueuePage />} />
+          <Route path="/results" element={<ResultsPage />} />
+          <Route path="/" element={<Navigate to="/upload" replace />} />
+          <Route path="*" element={<Navigate to="/upload" replace />} />
+        </Routes>
       </WorkflowProvider>
     </Router>
   );
