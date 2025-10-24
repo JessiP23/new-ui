@@ -70,6 +70,15 @@ export const useQueue = (lastQueueId?: string) => {
     }
   };
 
+  const fetchJobStatus = async (queueId: string) => {
+    try {
+      const response = await axios.get(`${API_BASE}/job_status?queue_id=${queueId}`);
+      return response.data;
+    } catch (err: any) {
+      return { counts: { pending: 0, running: 0, done: 0, failed: 0 }, total: 0 };
+    }
+  };
+
   const handleAssign = async () => {
     const assigns = [];
     for (const q of questions) {
@@ -104,5 +113,6 @@ export const useQueue = (lastQueueId?: string) => {
     error,
     handleAssign,
     toggleJudge,
+    fetchJobStatus,
   };
 };

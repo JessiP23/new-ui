@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { useQueue } from '../hooks/useQueue';
 import { useNavigate } from 'react-router-dom';
@@ -16,9 +16,21 @@ export default function Queue() {
     error,
     handleAssign,
     toggleJudge,
+    fetchJobStatus,
   } = useQueue(lastQueueId);
   const [running, setRunning] = useState(false);
   const [runMessage, setRunMessage] = useState('');
+  const [jobCounts, setJobCounts] = useState<{ pending: number; running: number; done: number; failed: number; total: number } | null>(null);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const pollHandleRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollHandleRef.current) {
+        window.clearInterval(pollHandleRef.current);
+      }
+    };
+  }, []);
 
   const handleRunEvaluations = async () => {
     if (!lastQueueId) {
@@ -29,14 +41,99 @@ export default function Queue() {
     setRunning(true);
     setRunMessage(`Starting evaluations for queue: ${lastQueueId}...`);
     try {
-      await axios.post(`${API_BASE}/run_judges?queue_id=${lastQueueId}`);
-      setRunMessage(`Evaluations completed successfully for queue: ${lastQueueId}!`);
-      setCurrentStep('results');
-      navigate('/results');
+      const resp = await axios.post(`${API_BASE}/run_judges?queue_id=${lastQueueId}`);
+      const enqueued = resp.data?.enqueued || 0;
+      const pollInterval = 1500; 
+      let total = enqueued;
+      setRunMessage(`Enqueued ${enqueued} jobs — polling progress...`);
+
+      const sseUrl = `${API_BASE}/live_job_status?queue_id=${lastQueueId}`;
+      let es: EventSource | null = null;
+      try {
+        es = new EventSource(sseUrl);
+      } catch (e) {
+        es = null;
+      }
+
+      if (es) {
+        es.onmessage = (ev) => {
+          try {
+            const status = JSON.parse(ev.data);
+            const counts = status.counts || { pending: 0, running: 0, done: 0, failed: 0 };
+            const totalReported = status.total || total || enqueued;
+            total = totalReported;
+            setJobCounts({ ...counts, total: totalReported });
+            const finished = (counts.done || 0) + (counts.failed || 0);
+            const percent = Math.round((finished / Math.max(1, total)) * 100);
+            setProgressPercent(percent);
+
+            if ((counts.pending || 0) + (counts.running || 0) === 0 && total > 0) {
+              es?.close();
+              setRunning(false);
+              setRunMessage(`Processing complete — ${finished}/${total} finished (${percent}%).`);
+              setCurrentStep('results');
+              navigate('/results');
+            }
+          } catch (e) {
+            console.error('SSE parse error', e);
+          }
+        };
+
+        es.onerror = (err) => {
+          console.warn('SSE error, falling back to polling', err);
+          es?.close();
+          pollHandleRef.current = window.setInterval(async () => {
+            const status = await fetchJobStatus(lastQueueId);
+            const counts = status.counts || { pending: 0, running: 0, done: 0, failed: 0 };
+            const statusTotal = status.total || total || enqueued;
+            total = statusTotal || total;
+            setJobCounts({ ...counts, total });
+            const finished = (counts.done || 0) + (counts.failed || 0);
+            const percent = Math.round((finished / Math.max(1, total)) * 100);
+            setProgressPercent(percent);
+            if ((counts.pending || 0) + (counts.running || 0) === 0 && total > 0) {
+              if (pollHandleRef.current) window.clearInterval(pollHandleRef.current);
+              setRunning(false);
+              setRunMessage(`Processing complete — ${finished}/${total} finished (${percent}%).`);
+              setCurrentStep('results');
+              navigate('/results');
+            }
+          }, pollInterval);
+        };
+
+      } else {
+        pollHandleRef.current = window.setInterval(async () => {
+          const status = await fetchJobStatus(lastQueueId);
+          const counts = status.counts || { pending: 0, running: 0, done: 0, failed: 0 };
+          const statusTotal = status.total || total || enqueued;
+          total = statusTotal || total;
+          setJobCounts({ ...counts, total });
+          const finished = (counts.done || 0) + (counts.failed || 0);
+          const percent = Math.round((finished / Math.max(1, total)) * 100);
+          setProgressPercent(percent);
+          if ((counts.pending || 0) + (counts.running || 0) === 0 && total > 0) {
+            if (pollHandleRef.current) window.clearInterval(pollHandleRef.current);
+            setRunning(false);
+            setRunMessage(`Processing complete — ${finished}/${total} finished (${percent}%).`);
+            setCurrentStep('results');
+            navigate('/results');
+          }
+        }, pollInterval);
+        (async () => {
+          const status = await fetchJobStatus(lastQueueId);
+          const counts = status.counts || { pending: 0, running: 0, done: 0, failed: 0 };
+          const statusTotal = status.total || total || enqueued;
+          total = statusTotal || total;
+          setJobCounts({ ...counts, total });
+          const finished = (counts.done || 0) + (counts.failed || 0);
+          const percent = Math.round((finished / Math.max(1, total)) * 100);
+          setProgressPercent(percent);
+        })();
+      }
     } catch (error: any) {
       setRunMessage(`Failed to run evaluations for queue: ${lastQueueId}: ${error.response?.data?.detail || error.message}`);
     } finally {
-      setRunning(false);
+      if (!pollHandleRef.current) setRunning(false);
     }
   };
 
@@ -79,6 +176,22 @@ export default function Queue() {
           <button onClick={handleRunEvaluations} disabled={running} className="px-4 py-2 rounded-md bg-green-600 hover:bg-green-700 disabled:opacity-50">
             {running ? 'Running Evaluations...' : 'Run Evaluations'}
           </button>
+        </div>
+      )}
+
+      {jobCounts && (
+        <div className="mt-4">
+          <div className="text-sm text-gray-300 mb-2">Progress</div>
+          <div className="w-full bg-gray-700 h-3 rounded overflow-hidden">
+            <div className="h-3 bg-green-500" style={{ width: `${progressPercent}%`, transition: 'width 300ms ease' }} />
+          </div>
+          <div className="flex justify-between text-xs text-gray-400 mt-2">
+            <div>Done: {jobCounts.done}</div>
+            <div>Running: {jobCounts.running}</div>
+            <div>Pending: {jobCounts.pending}</div>
+            <div>Failed: {jobCounts.failed}</div>
+            <div>Total: {jobCounts.total}</div>
+          </div>
         </div>
       )}
 
