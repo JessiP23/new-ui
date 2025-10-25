@@ -7,6 +7,7 @@ import { Table, type TableColumn } from '../components/ui/Table';
 import { useWorkflow } from '../contexts/WorkflowContext';
 import { useJudges } from '../hooks/useJudges';
 import type { Judge } from '../types';
+import { cn } from '../lib/cn';
 
 interface JudgeFormState {
     name: string;
@@ -21,6 +22,10 @@ const promptTemplates = [
     { title: 'Detailed reviewer', text: 'You are a thorough reviewer. Provide a verdict and a paragraph explaining strengths and weaknesses.' },
     { title: 'Positive feedback', text: 'You are an encouraging evaluator. Focus on the positive aspects and provide constructive feedback.' },
     { title: 'Critical analyst', text: 'You are a critical analyst. Highlight flaws and areas for improvement in detail.' },
+    { title: 'Rubric scorer', text: 'Score according to a rubric: break down criteria and give per-criterion scores, plus an overall pass/fail.' },
+    { title: 'Binary strict', text: 'Return only pass or fail with a brief justification (1-2 sentences). Be very strict.' },
+    { title: 'Summarizer & judge', text: 'Summarize the submission in one sentence, then give a short verdict and one-line reasoning.' },
+    { title: 'Actionable suggestions', text: 'Give a concise verdict and 2–3 actionable suggestions to improve the submission.' },
 ] as const;
 
 const modelOptions: Record<string, Array<{ value: string; label: string }>> = {
@@ -102,10 +107,10 @@ export default function JudgesPage() {
                 header: 'Actions',
                 render: (judge) => (
                 <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(judge)}>
+                    <Button variant="secondary" size="sm" onClick={() => handleEdit(judge)}>
                     Edit
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(judge.id)}>
+                    <Button variant="secondary" size="sm" onClick={() => handleDelete(judge.id)}>
                     Delete
                     </Button>
                 </div>
@@ -199,19 +204,22 @@ export default function JudgesPage() {
                             />
                         </label>
 
-                        <div className="flex flex-wrap gap-2">
-                            {promptTemplates.map((template) => (
-                                <Button
-                                    key={template.title}
+                        <div className="-mx-2 overflow-x-auto py-2">
+                            <div className="flex gap-2 px-2">
+                                {promptTemplates.map((template) => (
+                                <div key={template.title} className="flex-shrink-0">
+                                    <Button
                                     type="button"
-                                    variant="ghost"
-                                    size="sm"
+                                    variant="pill"
                                     onClick={() => setForm((prev) => ({ ...prev, system_prompt: template.text }))}
-                                >
+                                    >
                                     {template.title}
-                                </Button>
-                            ))}
+                                    </Button>
+                                </div>
+                                ))}
+                            </div>
                         </div>
+
 
                         <label className="flex items-center gap-2 text-sm text-slate-700">
                             <input
