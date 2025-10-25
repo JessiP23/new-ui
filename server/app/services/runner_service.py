@@ -1,12 +1,7 @@
-import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
-
 from supabase import Client
-
 from app.services.judge_service import run_single_judge
-
-logger = logging.getLogger(__name__)
 
 async def run_ai_judge_job(
     job: Dict[str, Any],
@@ -16,16 +11,6 @@ async def run_ai_judge_job(
 ):
     job_id = job["id"]
     try:
-        logger.info(
-            "runner.job.start",
-            extra={
-                "job_id": job_id,
-                "queue_id": job.get("queue_id"),
-                "submission_id": job.get("submission_id"),
-                "question_id": job.get("question_id"),
-                "judge_id": job.get("judge_id"),
-            },
-        )
         evaluation = await run_single_judge(
             submission_id=job["submission_id"],
             submission_data=job.get("submission_data") or {},
@@ -37,21 +22,9 @@ async def run_ai_judge_job(
         if evaluation:
             evaluation.setdefault("queue_id", job.get("queue_id"))
             _upsert_evaluation(supabase, evaluation)
-        else:
-            logger.warning(
-                "runner.job.skipped",
-                extra={
-                    "job_id": job_id,
-                    "queue_id": job.get("queue_id"),
-                    "submission_id": job.get("submission_id"),
-                    "question_id": job.get("question_id"),
-                    "judge_id": job.get("judge_id"),
-                },
-            )
         supabase.table("judge_jobs").update(
             {"status": "done", "updated_at": datetime.now(timezone.utc).isoformat()}
         ).eq("id", job_id).execute()
-        logger.info("runner.job.done", extra={"job_id": job_id})
     except Exception as exc:
         _mark_job_failed(supabase, job, exc)
 
@@ -74,29 +47,12 @@ def _upsert_evaluation(supabase: Client, payload: Dict[str, Any]) -> None:
 
     if not existing:
         supabase.table("evaluations").insert(payload, returning="minimal").execute()
-        logger.info(
-            "runner.evaluation.inserted",
-            extra={
-                "submission_id": payload.get("submission_id"),
-                "question_id": payload.get("question_id"),
-                "judge_id": payload.get("judge_id"),
-                "queue_id": payload.get("queue_id"),
-            },
-        )
         return
 
     tracked_fields = ("verdict", "reasoning", "reasoning_simhash")
     has_changes = any(payload.get(field) != existing.get(field) for field in tracked_fields)
 
     if not has_changes:
-        logger.debug(
-            "runner.evaluation.unchanged",
-            extra={
-                "submission_id": payload.get("submission_id"),
-                "question_id": payload.get("question_id"),
-                "judge_id": payload.get("judge_id"),
-            },
-        )
         return
 
     update_payload = {field: payload[field] for field in tracked_fields if field in payload}
@@ -106,14 +62,6 @@ def _upsert_evaluation(supabase: Client, payload: Dict[str, Any]) -> None:
     update_payload["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     supabase.table("evaluations").update(update_payload).eq("id", existing["id"]).execute()
-    logger.info(
-        "runner.evaluation.updated",
-        extra={
-            "submission_id": payload.get("submission_id"),
-            "question_id": payload.get("question_id"),
-            "judge_id": payload.get("judge_id"),
-        },
-    )
 
 def _mark_job_failed(supabase: Client, job: Dict[str, Any], exc: Exception):
     attempts = (job.get("attempts") or 0) + 1
@@ -126,14 +74,3 @@ def _mark_job_failed(supabase: Client, job: Dict[str, Any], exc: Exception):
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     ).eq("id", job["id"]).execute()
-    logger.exception(
-        "runner.job.failed",
-        extra={
-            "job_id": job.get("id"),
-            "queue_id": job.get("queue_id"),
-            "submission_id": job.get("submission_id"),
-            "question_id": job.get("question_id"),
-            "judge_id": job.get("judge_id"),
-            "attempts": attempts,
-        },
-    )
