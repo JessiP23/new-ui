@@ -27,8 +27,6 @@ async def run_ai_judge_job(
         )
         if evaluation:
             evaluation.setdefault("queue_id", job.get("queue_id"))
-            evaluation.setdefault("created_at", datetime.now(timezone.utc).isoformat())
-            evaluation.setdefault("updated_at", datetime.now(timezone.utc).isoformat())
             _insert_evaluation(supabase, evaluation)
         supabase.table("judge_jobs").update(
             {"status": "done", "updated_at": datetime.now(timezone.utc).isoformat()}
