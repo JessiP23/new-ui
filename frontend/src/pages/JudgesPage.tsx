@@ -142,7 +142,7 @@ export default function JudgesPage() {
 
             <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
                 <Card title={editingId ? 'Update judge' : 'Create judge'}>
-                    <form className="space-y-4" onSubmit={handleSubmit}>
+                    <form className="space-y-4 max-w-2xl" onSubmit={handleSubmit}>
                         <div className="grid gap-4 sm:grid-cols-2">
                             <label className="flex flex-col gap-1 text-sm">
                                 <span className="font-medium text-slate-700">Display name</span>

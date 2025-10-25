@@ -68,7 +68,7 @@ export default function ResultsPage() {
                 title="Filters"
                 actions={
                     <Button
-                        variant="ghost"
+                        variant="pill"
                         size="sm"
                         onClick={() =>
                             setFilters({
@@ -91,7 +91,7 @@ export default function ResultsPage() {
                         return (
                             <Button
                                 key={judge.id}
-                                variant={active ? 'primary' : 'ghost'}
+                                variant={active ? 'primary' : 'pill'}
                                 size="sm"
                                 onClick={() =>
                                 setFilters((prev) => ({
@@ -112,7 +112,7 @@ export default function ResultsPage() {
                         return (
                             <Button
                                 key={questionId}
-                                variant={active ? 'primary' : 'ghost'}
+                                variant={active ? 'primary' : 'pill'}
                                 size="sm"
                                 onClick={() =>
                                 setFilters((prev) => ({
@@ -131,7 +131,7 @@ export default function ResultsPage() {
                     {verdictOptions.map((verdictOption) => (
                         <Button
                             key={verdictOption || 'all'}
-                            variant={filters.verdict === verdictOption ? 'primary' : 'ghost'}
+                            variant='pill'
                             size="sm"
                             onClick={() => setFilters((prev) => ({ ...prev, page: 1, verdict: verdictOption }))}
                         >
@@ -159,7 +159,7 @@ export default function ResultsPage() {
                 </span>
                 <div className="flex items-center gap-2">
                     <Button
-                        variant="ghost"
+                        variant="pill"
                         size="sm"
                         disabled={filters.page <= 1}
                         onClick={() => setFilters((prev) => ({ ...prev, page: prev.page - 1 }))}
@@ -167,7 +167,7 @@ export default function ResultsPage() {
                         Previous
                     </Button>
                     <Button
-                        variant="ghost"
+                        variant="pill"
                         size="sm"
                         disabled={filters.page * filters.limit >= total}
                         onClick={() => setFilters((prev) => ({ ...prev, page: prev.page + 1 }))}
