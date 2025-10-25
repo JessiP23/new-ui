@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -11,6 +11,7 @@ import { useRunner } from '../hooks/useRunner';
 export default function QueuePage() {
     const navigate = useNavigate();
     const { lastQueueId, setCurrentStep, markCompleted } = useWorkflow();
+    const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
     const {
         queueReady,
         questions,
@@ -24,13 +25,47 @@ export default function QueuePage() {
     } = useQueue(lastQueueId);
     const { running, progress, message, counts, runEvaluations } = useRunner(lastQueueId);
 
+    const canSave = queueReady && questions.length > 0 && !running && !loading;
+    const canRun = assignmentsSaved && questions.length > 0 && !running;
+
     useEffect(() => {
         setCurrentStep('queue');
     }, [setCurrentStep]);
 
+    useEffect(() => {
+        if (redirectCountdown !== null) return; 
+        if (!running && counts && counts.total > 0 && (counts.pending + counts.running) === 0) {
+            setRedirectCountdown(5);
+        }
+    }, [running, counts, redirectCountdown]);
+
+    useEffect(() => {
+        if (redirectCountdown === null) {
+            return;
+        }
+        if (redirectCountdown <= 0) {
+            navigate('/results');
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            setRedirectCountdown((prev) => (prev === null ? prev : prev - 1));
+        }, 1000);
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [navigate, redirectCountdown]);
+
     const handleRun = async () => {
-        await runEvaluations();
+        setRedirectCountdown(null);
+        const result = await runEvaluations();
+        if (!result.success) {
+            return;
+        }
         markCompleted('queue');
+        if (result.enqueued === 0) {
+            navigate('/results');
+            return;
+        }
     };
 
     return (
@@ -52,6 +87,12 @@ export default function QueuePage() {
                     Skip to results
                 </Button>
             </div>
+
+            {redirectCountdown !== null ? (
+                <div className="rounded-md border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-700">
+                    Redirecting to results in {redirectCountdown}s. Keep this tab open while evaluations finish.
+                </div>
+            ) : null}
 
             {!queueReady ? (
                 <EmptyState
@@ -105,13 +146,15 @@ export default function QueuePage() {
                                         onClick={async () => {
                                             await saveAssignments();
                                         }}
-                                        disabled={loading || !questions.length || running}
+                                        disabled={!canSave}
                                     >
                                         Save assignments
                                     </Button>
-                                    <Button onClick={handleRun} disabled={running || !questions.length || !assignmentsSaved}>
-                                        {running ? 'Running...' : 'Run evaluations'}
-                                    </Button>
+                                    {assignmentsSaved ? (
+                                        <Button onClick={handleRun} disabled={!canRun}>
+                                            {running ? 'Running...' : 'Run evaluations'}
+                                        </Button>
+                                    ) : null}
                                 </div>
                             }
                         >
@@ -145,6 +188,9 @@ export default function QueuePage() {
                             ) : (
                                 <p className="text-sm text-slate-500">Run evaluations to see live progress.</p>
                             )}
+                            {!assignmentsSaved && questions.length > 0 ? (
+                                <p className="text-xs text-slate-400">Save assignments to unlock “Run evaluations”.</p>
+                            ) : null}
                         </Card>
                     </div>
                 </div>

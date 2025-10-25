@@ -1,14 +1,21 @@
 import json
+import logging
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+
 from fastapi import HTTPException
 from supabase import Client
+
 from app.core.config import Settings
+
+logger = logging.getLogger(__name__)
 
 def fetch_assignments(supabase: Client, queue_id: str) -> List[Dict[str, Any]]:
     response = supabase.table("assignments").select("*").eq("queue_id", queue_id).execute()
-    return response.data or []
+    rows = response.data or []
+    logger.info("queue.fetch_assignments", extra={"queue_id": queue_id, "count": len(rows)})
+    return rows
 
 def save_assignments(supabase: Client, assignments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     payload = []
@@ -18,7 +25,12 @@ def save_assignments(supabase: Client, assignments: List[Dict[str, Any]]) -> Lis
         data["judge_id"] = str(data["judge_id"])
         payload.append(data)
     response = supabase.table("assignments").insert(payload).execute()
-    return response.data or []
+    rows = response.data or []
+    logger.info(
+        "queue.save_assignments",
+        extra={"queue_id": payload[0]["queue_id"] if payload else None, "inserted": len(payload)},
+    )
+    return rows
 
 def list_questions(supabase: Client, queue_id: str) -> List[str]:
     subs = supabase.table("submissions").select("data").eq("queue_id", queue_id).execute()
@@ -32,17 +44,30 @@ def list_questions(supabase: Client, queue_id: str) -> List[str]:
             qdata = q.get("data") if isinstance(q, dict) else q
             if isinstance(qdata, dict) and "id" in qdata:
                 questions.add(qdata["id"])
-    return sorted(list(questions))
+    result = sorted(list(questions))
+    logger.info("queue.list_questions", extra={"queue_id": queue_id, "count": len(result)})
+    return result
 
 def enqueue_judge_jobs(queue_id: str, supabase: Client, settings: Settings) -> Dict[str, Optional[int]]:
     assigns_resp = supabase.table("assignments").select("question_id, judge_id").eq("queue_id", queue_id).execute()
     assignments = assigns_resp.data or []
     if not assignments:
+        logger.warning("queue.enqueue_judge_jobs.no_assignments", extra={"queue_id": queue_id})
         return {"message": "No assignments found for queue", "enqueued": 0}
 
     total_enqueued = 0
     jobs_batch: List[Dict[str, Any]] = []
     offset = 0
+
+    logger.info(
+        "queue.enqueue_judge_jobs.start",
+        extra={
+            "queue_id": queue_id,
+            "assignments": len(assignments),
+            "run_page_size": settings.run_judges_page,
+            "job_batch_size": settings.job_batch_size,
+        },
+    )
 
     while True:
         subs_resp = (
@@ -61,6 +86,10 @@ def enqueue_judge_jobs(queue_id: str, supabase: Client, settings: Settings) -> D
             try:
                 sub_data = json.loads(row.get("data") or "{}")
             except Exception:
+                logger.exception(
+                    "queue.enqueue_judge_jobs.parse_error",
+                    extra={"queue_id": queue_id, "submission_id": sub_id},
+                )
                 continue
             for assign in assignments:
                 qid = assign["question_id"]
@@ -76,6 +105,16 @@ def enqueue_judge_jobs(queue_id: str, supabase: Client, settings: Settings) -> D
 
     if jobs_batch:
         total_enqueued += _flush_jobs(supabase, jobs_batch)
+
+    logger.info(
+        "queue.enqueue_judge_jobs.finish",
+        extra={
+            "queue_id": queue_id,
+            "enqueued": total_enqueued,
+            "submissions": _count_records(supabase, "submissions", queue_id),
+            "assignments": _count_records(supabase, "assignments", queue_id),
+        },
+    )
 
     return {
         "message": "Jobs enqueued",
@@ -112,6 +151,10 @@ def _flush_jobs(supabase: Client, jobs: List[Dict[str, Any]]) -> int:
         return 0
     try:
         supabase.table("judge_jobs").insert(jobs).execute()
+        logger.info(
+            "queue.enqueue_judge_jobs.flush",
+            extra={"count": len(jobs), "queue_id": jobs[0].get("queue_id") if jobs else None},
+        )
         return len(jobs)
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to enqueue jobs") from exc

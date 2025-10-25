@@ -7,7 +7,7 @@ This repository hosts a full-stack evaluation workspace designed for the Besimpl
 ```
 .
 ├── frontend/             # React + Vite dashboard, hooks, and UI primitives
-│   └── legacy/           # Archived entry points preserved during cleanup
+│   └── src/legacy/       # Archived entry points preserved during cleanup
 └── server/               # FastAPI application, worker, and service layer
 ```
 
@@ -92,7 +92,15 @@ Key traits:
 
 - All ingestion routes validate payload structure and stream submissions in configurable batches.
 - Queue orchestration writes jobs into Supabase and hands off to an async worker with configurable concurrency, protected by exponential backoff on 429/timeout errors.
-- Evaluations are persisted with queue identifiers so the UI can filter by workflow step.
+- Evaluations are persisted with queue identifiers so the UI can filter by workflow step, and the worker now performs a check-then-insert safeguard to avoid rewriting identical verdicts while still updating when reasoning changes.
+
+## Evaluation run flow
+
+1. **Upload** — Operators import submissions via the upload wizard, which issues batched POST requests to the backend.
+2. **Assign judges** — The queue page loads available judges and questions, persisting assignments once per queue.
+3. **Run evaluations** — Triggering the run endpoint enqueues jobs and shows live diagnostics; once all jobs finish, the UI displays a five-second countdown before redirecting to the results page.
+4. **Worker processing** — Background workers drain `judge_jobs`, call the appropriate LLM provider, and persist evaluations idempotently.
+5. **Review** — The results dashboard surfaces verdicts, filters, and pass-rate metrics scoped to the active queue.
 
 ## Data model
 
@@ -179,8 +187,8 @@ classDiagram
 
 ## Migration & cleanup summary
 
-- Converted React workflow to rely on stable page-level hooks; legacy `src/components/*` entry points now emit deprecation warnings and have archived copies under `legacy/`.
-- Added guarded state updates to every `useEffect` that triggers setters, preventing the "Maximum update depth exceeded" feedback loop.
-- Centralized repetitive API try/catch patterns into `src/utils/safeAsync.ts` and applied it across dashboard hooks.
-- Introduced `.bak.YYYYMMDDHHmmss` snapshots alongside every modified file as a lightweight rollback safety net.
-- Added `server/requirements.txt` to capture backend dependencies explicitly.
+- Converted the React workflow to lean on page-level hooks and archived the old entry points under `src/legacy`, logging dev warnings when imported.
+- Guarded queue and results effects against stale updates while continuing to run all network calls through the shared `safeAsync` helper.
+- Updated the worker service to fetch-before-insert, keeping evaluation writes idempotent without hammering Supabase.
+- Added a post-run countdown in the queue view so operators can read the final status before the app navigates to results.
+- Captured the pre-change runner service in `runner_service.py.bak` for a fast rollback path.

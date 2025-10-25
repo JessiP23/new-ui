@@ -66,7 +66,7 @@ export function useResults() {
   );
 
   const fetchEvaluations = useCallback(async () => {
-    setLoading((prev) => (prev ? prev : true));
+    setLoading(true);
 
     const query = buildQuery({
       queue_id: filters.queue_id,
@@ -83,8 +83,8 @@ export function useResults() {
     );
 
     if (!response || requestError) {
-      setError((prev) => (prev === 'Failed to fetch evaluations' ? prev : 'Failed to fetch evaluations'));
-      setLoading((prev) => (prev ? false : prev));
+      setError('Failed to fetch evaluations');
+      setLoading(false);
       return;
     }
 
@@ -97,8 +97,8 @@ export function useResults() {
       return prevJson === nextJson ? prev : rows;
     });
     setTotal((prev) => (prev === totalRows ? prev : totalRows));
-    setError((prev) => (prev === '' ? prev : ''));
-    setLoading((prev) => (prev ? false : prev));
+    setError('');
+    setLoading(false);
   }, [filters]);
 
   useEffect(() => {
@@ -110,8 +110,14 @@ export function useResults() {
   }, [fetchQuestions, filters.queue_id]);
 
   useEffect(() => {
+    if (!filters.queue_id) {
+      setEvaluations([]);
+      setTotal(0);
+      setLoading(false);
+      return;
+    }
     void fetchEvaluations();
-  }, [fetchEvaluations]);
+  }, [fetchEvaluations, filters.queue_id]);
 
   return {
     evaluations,

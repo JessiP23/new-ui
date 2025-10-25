@@ -1,8 +1,10 @@
 import os
 from functools import lru_cache
-from typing import Optional
+from typing import Any, Optional
 from groq import AsyncGroq
 from openai import AsyncOpenAI
+from anthropic import AsyncAnthropic
+import google.generativeai as genai
 
 @lru_cache
 def get_groq_client() -> AsyncGroq:
@@ -17,3 +19,18 @@ def get_openai_client() -> Optional[AsyncOpenAI]:
     if not api_key:
         return None
     return AsyncOpenAI(api_key=api_key)
+
+@lru_cache
+def get_anthropic_client() -> Optional[Any]:
+    api_key: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+    return AsyncAnthropic(api_key=api_key)
+
+@lru_cache
+def get_gemini_client() -> Optional[Any]:
+    api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return None
+    genai.configure(api_key=api_key)
+    return genai

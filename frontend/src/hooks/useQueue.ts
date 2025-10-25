@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '../lib/api';
 import { safeAsync } from '../utils/safeAsync';
 import type { Assignment, Judge, JobStatusCounts } from '../types';
@@ -12,24 +12,17 @@ export function useQueue(queueId?: string) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [assignmentsSaved, setAssignmentsSaved] = useState<boolean>(false);
-
-  const hasQueue = useMemo(() => Boolean(queueId), [queueId]);
+  const lastLoadedQueueRef = useRef<string | null>(null);
 
   const fetchJudges = useCallback(async () => {
-    const { data, error: requestError } = await safeAsync(() => apiClient.get<Judge[]>("/judges"));
+    const { data, error: requestError } = await safeAsync(() => apiClient.get<Judge[]>('/judges'));
     if (requestError) {
       console.error(requestError);
-      setError("Failed to fetch judges");
+      setError('Failed to fetch judges');
       return;
     }
     setError('');
-    const nextJudges = data?.data ?? [];
-    setJudges((prev) => {
-      if (JSON.stringify(prev) === JSON.stringify(nextJudges)) {
-        return prev;
-      }
-      return nextJudges;
-    });
+    setJudges(data?.data ?? []);
   }, []);
 
   const fetchAssignments = useCallback(
@@ -43,36 +36,46 @@ export function useQueue(queueId?: string) {
         return;
       }
 
+      const items = data?.data ?? [];
+      if (lastLoadedQueueRef.current !== qid) {
+        return;
+      }
+      const map = items.reduce<SelectedJudgesMap>((acc, { question_id, judge_id }) => {
+        (acc[question_id] ||= []).push(judge_id);
+        return acc;
+      }, {});
       setError('');
-      const map: SelectedJudgesMap = {};
-      (data?.data ?? []).forEach(({ question_id, judge_id }) => {
-        map[question_id] = map[question_id] ? [...map[question_id], judge_id] : [judge_id];
-      });
       setSelectedJudges(map);
+      setAssignmentsSaved(items.length > 0);
     },
-    [],
+    [lastLoadedQueueRef],
   );
 
   const fetchQuestions = useCallback(
     async (qid: string) => {
       if (!qid) return;
       setLoading(true);
-      const { data, error: requestError } = await safeAsync(() =>
-        apiClient.get<string[]>(`/queue/questions?queue_id=${qid}`),
-      );
-      if (requestError) {
-        console.error(requestError);
-        setError('Failed to fetch questions');
-        setLoading(false);
-        return;
-      }
+      try {
+        const { data, error: requestError } = await safeAsync(() =>
+          apiClient.get<string[]>(`/queue/questions?queue_id=${qid}`),
+        );
+        if (requestError) {
+          console.error(requestError);
+          setError('Failed to fetch questions');
+          return;
+        }
 
-      const nextQuestions = data?.data ?? [];
-      setQuestions(nextQuestions);
-      await fetchAssignments(qid);
-      setLoading(false);
+        const nextQuestions = data?.data ?? [];
+        if (lastLoadedQueueRef.current !== qid) {
+          return;
+        }
+        setQuestions(nextQuestions);
+        await fetchAssignments(qid);
+      } finally {
+        setLoading(false);
+      }
     },
-    [fetchAssignments],
+    [fetchAssignments, lastLoadedQueueRef],
   );
 
   useEffect(() => {
@@ -80,24 +83,37 @@ export function useQueue(queueId?: string) {
   }, [fetchJudges]);
 
   useEffect(() => {
-    if (queueId) {
+    if (!queueId) {
+      lastLoadedQueueRef.current = null;
+      setQuestions([]);
+      setSelectedJudges({});
       setAssignmentsSaved(false);
-      void fetchQuestions(queueId);
+      return;
     }
+
+    if (lastLoadedQueueRef.current === queueId) {
+      return;
+    }
+
+    lastLoadedQueueRef.current = queueId;
+    setAssignmentsSaved(false);
+    void fetchQuestions(queueId);
   }, [queueId, fetchQuestions]);
 
   const saveAssignments = useCallback(async () => {
     if (!queueId) return;
-    const payload: Assignment[] = [];
     const seen = new Set<string>();
-
-    questions.forEach((questionId) => {
-      (selectedJudges[questionId] ?? []).forEach((judgeId) => {
+    const payload = questions.flatMap<Assignment>((questionId) => {
+      const judgesForQuestion = selectedJudges[questionId] ?? [];
+      return judgesForQuestion.reduce<Assignment[]>((acc, judgeId) => {
         const key = `${questionId}::${judgeId}`;
-        if (seen.has(key)) return;
+        if (seen.has(key)) {
+          return acc;
+        }
         seen.add(key);
-        payload.push({ question_id: questionId, judge_id: judgeId, queue_id: queueId });
-      });
+        acc.push({ question_id: questionId, judge_id: judgeId, queue_id: queueId });
+        return acc;
+      }, []);
     });
 
     const { error: requestError } = await safeAsync(() => apiClient.post('/queue/assignments', payload));
@@ -107,9 +123,12 @@ export function useQueue(queueId?: string) {
       return;
     }
 
-    await fetchAssignments(queueId);
     setError('');
-    setAssignmentsSaved(true);
+    setAssignmentsSaved(payload.length > 0);
+    if (!payload.length) {
+      setSelectedJudges({});
+    }
+    await fetchAssignments(queueId);
   }, [fetchAssignments, questions, queueId, selectedJudges]);
 
   const toggleJudge = useCallback((questionId: string, judgeId: string) => {
@@ -117,6 +136,10 @@ export function useQueue(queueId?: string) {
       const current = prev[questionId] || [];
       const exists = current.includes(judgeId);
       const next = exists ? current.filter((id) => id !== judgeId) : [...current, judgeId];
+      if (!next.length) {
+        const { [questionId]: _removed, ...rest } = prev;
+        return rest;
+      }
       return { ...prev, [questionId]: next };
     });
     setAssignmentsSaved(false);
@@ -146,7 +169,7 @@ export function useQueue(queueId?: string) {
   }, [queueId]);
 
   return {
-    queueReady: hasQueue,
+    queueReady: Boolean(queueId),
     questions,
     judges,
     selectedJudges,

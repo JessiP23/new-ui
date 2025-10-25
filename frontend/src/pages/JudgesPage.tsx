@@ -33,6 +33,15 @@ const modelOptions: Record<string, Array<{ value: string; label: string }>> = {
         { value: 'gpt-4', label: 'GPT-4' },
         { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
     ],
+    anthropic: [
+        { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
+        { value: 'claude-opus-4-1-20250805', label: 'Claude Opus 4.1' },
+    ],
+    gemini: [
+        { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+        { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+        { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite' },
+    ],
 };
 
 const defaultForm: JudgeFormState = {
@@ -157,6 +166,8 @@ export default function JudgesPage() {
                                 >
                                     <option value="groq">Groq</option>
                                     <option value="openai">OpenAI</option>
+                                    <option value="anthropic">Anthropic</option>
+                                    <option value="gemini">Gemini</option>
                                 </select>
                             </label>
                         </div>
