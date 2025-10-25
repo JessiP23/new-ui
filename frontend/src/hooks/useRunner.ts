@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '../lib/api';
+import { safeAsync } from '../utils/safeAsync';
 import type { JobStatusCounts } from '../types';
 
 interface RunnerState {
@@ -46,25 +47,28 @@ export function useRunner(queueId?: string) {
 
     const fetchJobStatus = useCallback(async () => {
         if (!queueId) return;
-        try {
-        const response = await apiClient.get<{ counts: Record<string, number>; total: number }>(
-            `/diagnostics/job_status?queue_id=${queueId}`,
+        const { data, error } = await safeAsync(() =>
+            apiClient.get<{ counts: Record<string, number>; total: number }>(
+                `/diagnostics/job_status?queue_id=${queueId}`,
+            ),
         );
+        if (error) {
+            console.error('Failed to fetch job status', error);
+            return;
+        }
+
         const counts = {
-            pending: response.data.counts.pending ?? 0,
-            running: response.data.counts.running ?? 0,
-            done: response.data.counts.done ?? 0,
-            failed: response.data.counts.failed ?? 0,
-            total: response.data.total ?? 0,
+            pending: data?.data.counts.pending ?? 0,
+            running: data?.data.counts.running ?? 0,
+            done: data?.data.counts.done ?? 0,
+            failed: data?.data.counts.failed ?? 0,
+            total: data?.data.total ?? 0,
         } satisfies JobStatusCounts;
         const progress = computeProgress(counts, counts.total);
         updateState({ counts, progress });
-        if ((counts.pending + counts.running === 0) && counts.total > 0) {
+        if (counts.total > 0 && counts.pending + counts.running === 0) {
             updateState({ running: false, message: `Processing complete — ${counts.done + counts.failed}/${counts.total} finished.` });
             cleanup();
-        }
-        } catch (err) {
-        console.error('Failed to fetch job status', err);
         }
     }, [cleanup, queueId, updateState]);
 
@@ -77,8 +81,13 @@ export function useRunner(queueId?: string) {
         cleanup();
 
         try {
-            const response = await apiClient.post(`/queue/run`, null, { params: { queue_id: queueId } });
-            const enqueued = response.data?.enqueued ?? 0;
+            const { data, error } = await safeAsync(() =>
+                apiClient.post(`/queue/run`, null, { params: { queue_id: queueId } }),
+            );
+            if (error) {
+                throw error;
+            }
+            const enqueued = data?.data?.enqueued ?? 0;
             updateState({ message: `Enqueued ${enqueued} jobs — monitoring progress...` });
 
             const sseUrl = `${apiClient.defaults.baseURL}/diagnostics/live_job_status?queue_id=${queueId}`;

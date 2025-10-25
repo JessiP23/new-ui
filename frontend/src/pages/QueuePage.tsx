@@ -11,7 +11,17 @@ import { useRunner } from '../hooks/useRunner';
 export default function QueuePage() {
     const navigate = useNavigate();
     const { lastQueueId, setCurrentStep, markCompleted } = useWorkflow();
-    const { queueReady, questions, judges, selectedJudges, loading, error, toggleJudge, saveAssignments } = useQueue(lastQueueId);
+    const {
+        queueReady,
+        questions,
+        judges,
+        selectedJudges,
+        loading,
+        error,
+        toggleJudge,
+        saveAssignments,
+        assignmentsSaved,
+    } = useQueue(lastQueueId);
     const { running, progress, message, counts, runEvaluations } = useRunner(lastQueueId);
 
     useEffect(() => {
@@ -19,9 +29,8 @@ export default function QueuePage() {
     }, [setCurrentStep]);
 
     const handleRun = async () => {
-        markCompleted('queue');
-        await saveAssignments();
         await runEvaluations();
+        markCompleted('queue');
     };
 
     return (
@@ -91,10 +100,16 @@ export default function QueuePage() {
                             description="Persist judge assignments before running the evaluation pipeline."
                             actions={
                                 <div className="flex gap-2">
-                                    <Button variant="secondary" onClick={() => saveAssignments()} disabled={loading || !questions.length}>
+                                    <Button
+                                        variant="secondary"
+                                        onClick={async () => {
+                                            await saveAssignments();
+                                        }}
+                                        disabled={loading || !questions.length || running}
+                                    >
                                         Save assignments
                                     </Button>
-                                    <Button onClick={handleRun} disabled={running || !questions.length}>
+                                    <Button onClick={handleRun} disabled={running || !questions.length || !assignmentsSaved}>
                                         {running ? 'Running...' : 'Run evaluations'}
                                     </Button>
                                 </div>

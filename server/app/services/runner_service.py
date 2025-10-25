@@ -1,7 +1,6 @@
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict
-from fastapi import HTTPException
 from groq import AsyncGroq
 from openai import AsyncOpenAI
 from supabase import Client
@@ -39,28 +38,19 @@ async def run_ai_judge_job(
         _mark_job_failed(supabase, job, exc)
 
 def _insert_evaluation(supabase: Client, payload: Dict[str, Any]):
-    attempts = 0
-    while attempts < max(5, len(payload)):
-        try:
-            supabase.table("evaluations").insert(payload).execute()
-            return
-        except Exception as exc: 
-            msg = str(exc)
-            if "Could not find the" in msg:
-                missing_col = _extract_missing_column(msg)
-                if missing_col and missing_col in payload:
-                    payload.pop(missing_col, None)
-                    attempts += 1
-                    continue
-            raise
-
-def _extract_missing_column(message: str) -> str | None:
-    import re
-
-    match = re.search(r"Could not find the '([a-zA-Z0-9_]+)' column", message)
-    if match:
-        return match.group(1)
-    return None
+    existing = (
+        supabase
+        .table("evaluations")
+        .select("id")
+        .eq("submission_id", payload["submission_id"])
+        .eq("question_id", payload["question_id"])
+        .eq("judge_id", payload["judge_id"])
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        return existing.data[0]
+    supabase.table("evaluations").insert(payload).execute()
 
 def _mark_job_failed(supabase: Client, job: Dict[str, Any], exc: Exception):
     attempts = (job.get("attempts") or 0) + 1
