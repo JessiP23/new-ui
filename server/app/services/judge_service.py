@@ -1,14 +1,9 @@
 import asyncio
 import json
-import logging
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Literal, Optional
-
 from pydantic import BaseModel, ValidationError
-
 from app.services.fingerprint_service import simhash
-
-logger = logging.getLogger(__name__)
 
 class VerdictSchema(BaseModel):
     verdict: Literal['pass', 'fail', 'inconclusive']
@@ -74,25 +69,41 @@ PROMPT_TEMPLATE = (
     "Response ONLY with a Json object: {{\"verdict\":\"pass|fail|inconclusive\",\"reasoning\":\"...\"}}\n"
 )
 
+def _resolve_provider(provider: Optional[str], model: Optional[str]) -> Optional[str]:
+    inferred = None
+    if model:
+        model_lower = model.lower()
+        if model_lower.startswith('gemini'):
+            inferred = 'gemini'
+        elif model_lower.startswith('gpt') or model_lower.startswith('o1'):
+            inferred = 'openai'
+        elif model_lower.startswith('claude'):
+            inferred = 'anthropic'
+        elif model_lower.startswith('llama') or model_lower.startswith('mixtral'):
+            inferred = 'groq'
+
+    if provider:
+        prov = provider.strip().lower()
+        if inferred and inferred != prov:
+            return inferred
+        return prov
+    return inferred
+
 async def _call_provider(
     provider: str,
     clients: Dict[str, Any],
     model: Optional[str],
     prompt: str,
 ) -> Optional[str]:
-    provider_key = (provider or 'groq').lower()
+    provider_key = _resolve_provider(provider, model)
     provider_fn = PROVIDERS.get(provider_key)
     if not provider_fn:
-        logger.warning("judge.call_provider.unsupported", extra={"provider": provider_key})
         return None
     if not model:
-        logger.warning("judge.call_provider.no_model", extra={"provider": provider_key})
         return None
     client = clients.get(provider_key)
     if client is None:
-        logger.warning("judge.call_provider.missing_client", extra={"provider": provider_key})
         return None
-    logger.debug("judge.call_provider.start", extra={"provider": provider_key, "model": model})
     return await provider_fn(client, model, prompt)
 
 def _parse_verdict(raw: str) -> tuple[str, str]:
@@ -124,33 +135,16 @@ async def run_single_judge(
     provider_clients: Dict[str, Any],
     judges: Dict[str, Dict[str, Any]],
 ):
-    logger.debug(
-        "judge.run_single_judge.start",
-        extra={"submission_id": submission_id, "question_id": question_id, "judge_id": judge_id},
-    )
-
     question = _extract_question(submission_data, question_id)
     if not question:
-        logger.warning(
-            "judge.run_single_judge.missing_question",
-            extra={"submission_id": submission_id, "question_id": question_id, "judge_id": judge_id},
-        )
         return None
 
     answer = submission_data.get('answers', {}).get(question_id)
     if not answer:
-        logger.warning(
-            "judge.run_single_judge.missing_answer",
-            extra={"submission_id": submission_id, "question_id": question_id, "judge_id": judge_id},
-        )
         return None
 
     judge = judges.get(judge_id)
     if not judge or judge.get('active') is False:
-        logger.warning(
-            "judge.run_single_judge.inactive_or_missing_judge",
-            extra={"submission_id": submission_id, "question_id": question_id, "judge_id": judge_id},
-        )
         return None
 
     answer_text = ' '.join(str(value) for value in answer.values())
@@ -160,32 +154,11 @@ async def run_single_judge(
         answer_text=answer_text,
     )
 
-    raw_response = await _call_provider(judge.get('provider', 'groq'), provider_clients, judge.get('model'), prompt)
-    if raw_response is None:
-        logger.warning(
-            "judge.run_single_judge.provider_no_response",
-            extra={
-                "submission_id": submission_id,
-                "question_id": question_id,
-                "judge_id": judge_id,
-                "provider": judge.get('provider', 'groq'),
-                "model": judge.get('model'),
-            },
-        )
+    raw_response = await _call_provider(judge.get('provider'), provider_clients, judge.get('model'), prompt)
+    if not raw_response:
         return None
     verdict, reasoning = _parse_verdict(raw_response)
     reasoning = reasoning[:1000]
-
-    logger.info(
-        "judge.run_single_judge.success",
-        extra={
-            "submission_id": submission_id,
-            "question_id": question_id,
-            "judge_id": judge_id,
-            "provider": judge.get('provider'),
-            "verdict": verdict,
-        },
-    )
 
     return {
         'submission_id': submission_id,

@@ -33,7 +33,7 @@ export default function QueuePage() {
     }, [setCurrentStep]);
 
     useEffect(() => {
-        if (redirectCountdown !== null) return; 
+        if (redirectCountdown !== null) return;
         if (!running && counts && counts.total > 0 && (counts.pending + counts.running) === 0) {
             setRedirectCountdown(5);
         }
@@ -184,6 +184,9 @@ export default function QueuePage() {
                                         <div className="h-full bg-indigo-500 transition-all" style={{ width: `${progress}%` }} />
                                     </div>
                                     {message ? <p className="text-xs text-slate-500">{message}</p> : null}
+                                    {redirectCountdown !== null ? (
+                                        <p className="text-xs text-indigo-600">Redirecting to results in {redirectCountdown}s…</p>
+                                    ) : null}
                                 </div>
                             ) : (
                                 <p className="text-sm text-slate-500">Run evaluations to see live progress.</p>

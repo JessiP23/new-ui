@@ -66,6 +66,7 @@ async def worker_loop():
                 await asyncio.sleep(POLL_INTERVAL)
                 continue
 
+            judges_map = await fetch_judges_map()
             job_ids = [job["id"] for job in jobs]
             supabase.table("judge_jobs").update(
                 {"status": "running", "updated_at": datetime.now(timezone.utc).isoformat()}

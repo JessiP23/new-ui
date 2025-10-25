@@ -7,7 +7,7 @@ const baseClasses = 'inline-flex items-center justify-center rounded-md border b
 const variants = {
     primary: 'bg-indigo-600 text-white hover:bg-indigo-700 focus-visible:outline-indigo-600',
     secondary: 'bg-slate-100 text-slate-100 hover:bg-slate-200 focus-visible:outline-slate-400',
-    ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 focus-visible:outline-slate-400',
+    ghost: 'bg-transparent text-slate-200 hover:bg-slate-100 focus-visible:outline-slate-400',
 } as const;
 
 const sizes = {
