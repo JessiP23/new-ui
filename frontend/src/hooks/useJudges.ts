@@ -1,72 +1,99 @@
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useCallback, useEffect, useState } from 'react';
+import { apiClient } from '../lib/api';
+import type { Judge } from '../types';
+import { safeAsync } from '../utils/safeAsync';
 
-const API_BASE = 'http://localhost:8000';
-
-interface Judge {
-  id: string;
-  name: string;
-  system_prompt: string;
-  model: string;
-  active: boolean;
-  provider: string;
-}
-
-export const useJudges = () => {
+export function useJudges() {
   const [judges, setJudges] = useState<Judge[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
 
-  useEffect(() => {
-    fetchJudges();
+  const fetchJudges = useCallback(async () => {
+    setLoading((prev) => (prev ? prev : true));
+
+    const { data: response, error: requestError } = await safeAsync(
+      () => apiClient.get<Judge[]>('/judges'),
+      (err) => console.error(err),
+    );
+
+    if (!response || requestError) {
+      setError((prev) => (prev === 'Failed to fetch judges' ? prev : 'Failed to fetch judges'));
+      setLoading((prev) => (prev ? false : prev));
+      return;
+    }
+
+    const nextJudges = response.data ?? [];
+    setJudges((prev) => {
+      const prevJson = JSON.stringify(prev);
+      const nextJson = JSON.stringify(nextJudges);
+      if (prevJson === nextJson) {
+        return prev;
+      }
+      return nextJudges;
+    });
+    setError((prev) => (prev === '' ? prev : ''));
+    setLoading((prev) => (prev ? false : prev));
   }, []);
 
-  const fetchJudges = async () => {
-    setLoading(true);
-    try {
-      const response = await axios.get(`${API_BASE}/judges`);
-      setJudges(response.data);
-    } catch (err: any) {
-      setError('Failed to fetch judges');
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    void fetchJudges();
+  }, [fetchJudges]);
 
-  const createJudge = async (judge: Omit<Judge, 'id'>) => {
-    try {
-      await axios.post(`${API_BASE}/judges`, judge);
-      fetchJudges();
-    } catch (err: any) {
-      setError('Failed to create judge');
-    }
-  };
+  const createJudge = useCallback(
+    async (judge: Omit<Judge, 'id'>) => {
+      const { error: requestError } = await safeAsync(
+        () => apiClient.post('/judges', judge),
+        (err) => console.error(err),
+      );
+      if (requestError) {
+        setError((prev) => (prev === 'Failed to create judge' ? prev : 'Failed to create judge'));
+        return;
+      }
+      setError((prev) => (prev === '' ? prev : ''));
+      await fetchJudges();
+    },
+    [fetchJudges],
+  );
 
-  const updateJudge = async (id: string, judge: Omit<Judge, 'id'>) => {
-    try {
-      await axios.put(`${API_BASE}/judges/${id}`, judge);
-      fetchJudges();
-    } catch (err: any) {
-      setError('Failed to update judge');
-    }
-  };
+  const updateJudge = useCallback(
+    async (id: string, judge: Omit<Judge, 'id'>) => {
+      const { error: requestError } = await safeAsync(
+        () => apiClient.put(`/judges/${id}`, judge),
+        (err) => console.error(err),
+      );
+      if (requestError) {
+        setError((prev) => (prev === 'Failed to update judge' ? prev : 'Failed to update judge'));
+        return;
+      }
+      setError((prev) => (prev === '' ? prev : ''));
+      await fetchJudges();
+    },
+    [fetchJudges],
+  );
 
-  const deleteJudge = async (id: string) => {
-    try {
-      await axios.delete(`${API_BASE}/judges/${id}`);
-      fetchJudges();
-    } catch (err: any) {
-      setError('Failed to delete judge');
-    }
-  };
+  const deleteJudge = useCallback(
+    async (id: string) => {
+      const { error: requestError } = await safeAsync(
+        () => apiClient.delete(`/judges/${id}`),
+        (err) => console.error(err),
+      );
+      if (requestError) {
+        setError((prev) => (prev === 'Failed to delete judge' ? prev : 'Failed to delete judge'));
+        return;
+      }
+      setError((prev) => (prev === '' ? prev : ''));
+      await fetchJudges();
+    },
+    [fetchJudges],
+  );
 
   return {
     judges,
     loading,
     error,
-    fetchJudges,
     createJudge,
     updateJudge,
     deleteJudge,
+    refresh: fetchJudges,
   };
-};
+}

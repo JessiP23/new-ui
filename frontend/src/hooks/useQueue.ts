@@ -1,118 +1,135 @@
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { apiClient } from '../lib/api';
+import type { Assignment, Judge, JobStatusCounts } from '../types';
 
-const API_BASE = 'http://localhost:8000';
+type SelectedJudgesMap = Record<string, string[]>;
 
-interface Assignment {
-  id: string;
-  question_id: string;
-  judge_id: string;
-  queue_id: string;
-  judges: { name: string };
-}
-
-interface Judge {
-  id: string;
-  name: string;
-}
-
-export const useQueue = (lastQueueId?: string) => {
+export function useQueue(queueId?: string) {
   const [questions, setQuestions] = useState<string[]>([]);
   const [judges, setJudges] = useState<Judge[]>([]);
-  const [selectedJudges, setSelectedJudges] = useState<Record<string, string[]>>({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [selectedJudges, setSelectedJudges] = useState<SelectedJudgesMap>({});
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
 
-  useEffect(() => {
-    fetchJudges();
-  }, []);
+  const hasQueue = useMemo(() => Boolean(queueId), [queueId]);
 
-  useEffect(() => {
-    if (lastQueueId && !questions.length) {
-      fetchQuestions(lastQueueId);
-    }
-  }, [lastQueueId]);
-
-  const fetchJudges = async () => {
+  const fetchJudges = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_BASE}/judges`);
+      const response = await apiClient.get<Judge[]>('/judges');
       setJudges(response.data);
-    } catch (err: any) {
+    } catch (err) {
+      console.error(err);
       setError('Failed to fetch judges');
     }
-  };
+  }, []);
 
-  const fetchQuestions = async (queueId: string) => {
-    if (!queueId) return;
-    setLoading(true);
-    try {
-      const response = await axios.get(`${API_BASE}/questions?queue_id=${queueId}`);
-      setQuestions(response.data);
-      await fetchAssignments(queueId);
-    } catch (err: any) {
-      setError('Failed to fetch questions');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAssignments = async (queueId: string) => {
-    try {
-      const response = await axios.get(`${API_BASE}/assignments?queue_id=${queueId}`);
-      const sel: Record<string, string[]> = {};
-      response.data.forEach((a: Assignment) => {
-        if (!sel[a.question_id]) sel[a.question_id] = [];
-        sel[a.question_id].push(a.judge_id);
-      });
-      setSelectedJudges(sel);
-    } catch (err: any) {
-      setError('Failed to fetch assignments');
-    }
-  };
-
-  const fetchJobStatus = async (queueId: string) => {
-    try {
-      const response = await axios.get(`${API_BASE}/job_status?queue_id=${queueId}`);
-      return response.data;
-    } catch (err: any) {
-      return { counts: { pending: 0, running: 0, done: 0, failed: 0 }, total: 0 };
-    }
-  };
-
-  const handleAssign = async () => {
-    const assigns = [];
-    for (const q of questions) {
-      for (const j of selectedJudges[q] || []) {
-        assigns.push({ question_id: q, judge_id: j, queue_id: lastQueueId });
+  const fetchAssignments = useCallback(
+    async (qid: string) => {
+      try {
+        const response = await apiClient.get<Assignment[]>(`/queue/assignments${qid ? `?queue_id=${qid}` : ''}`);
+        const map: SelectedJudgesMap = {};
+        (response.data || []).forEach((assignment) => {
+          const { question_id, judge_id } = assignment;
+          if (!map[question_id]) {
+            map[question_id] = [];
+          }
+          map[question_id].push(judge_id);
+        });
+        setSelectedJudges(map);
+      } catch (err) {
+        console.error(err);
+        setError('Failed to fetch assignments');
       }
+    },
+    [],
+  );
+
+  const fetchQuestions = useCallback(
+    async (qid: string) => {
+      if (!qid) return;
+      setLoading(true);
+      try {
+        const response = await apiClient.get<string[]>(`/queue/questions?queue_id=${qid}`);
+        setQuestions(response.data || []);
+        await fetchAssignments(qid);
+      } catch (err) {
+        console.error(err);
+        setError('Failed to fetch questions');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchAssignments],
+  );
+
+  useEffect(() => {
+    void fetchJudges();
+  }, [fetchJudges]);
+
+  useEffect(() => {
+    if (queueId) {
+      void fetchQuestions(queueId);
     }
+  }, [queueId, fetchQuestions]);
+
+  const saveAssignments = useCallback(async () => {
+    if (!queueId) return;
+    const payload: Assignment[] = [];
+    questions.forEach((questionId) => {
+      (selectedJudges[questionId] || []).forEach((judgeId) => {
+        payload.push({ question_id: questionId, judge_id: judgeId, queue_id: queueId });
+      });
+    });
     try {
-      await axios.post(`${API_BASE}/assignments`, assigns);
-      await fetchAssignments(lastQueueId!);
-    } catch (err: any) {
+      await apiClient.post('/queue/assignments', payload);
+      await fetchAssignments(queueId);
+    } catch (err) {
+      console.error(err);
       setError('Failed to save assignments');
     }
-  };
+  }, [fetchAssignments, questions, queueId, selectedJudges]);
 
-  const toggleJudge = (q: string, j: string) => {
-    setSelectedJudges(prev => {
-      const curr = prev[q] || [];
-      if (curr.includes(j)) {
-        return { ...prev, [q]: curr.filter(id => id !== j) };
-      } else {
-        return { ...prev, [q]: [...curr, j] };
-      }
+  const toggleJudge = useCallback((questionId: string, judgeId: string) => {
+    setSelectedJudges((prev) => {
+      const current = prev[questionId] || [];
+      const exists = current.includes(judgeId);
+      const next = exists ? current.filter((id) => id !== judgeId) : [...current, judgeId];
+      return { ...prev, [questionId]: next };
     });
-  };
+  }, []);
+
+  const fetchJobStatus = useCallback(async (): Promise<JobStatusCounts> => {
+    if (!queueId) {
+      return { pending: 0, running: 0, done: 0, failed: 0, total: 0 };
+    }
+    try {
+      const response = await apiClient.get<{ counts: Record<string, number>; total: number }>(
+        `/diagnostics/job_status?queue_id=${queueId}`,
+      );
+      const counts = response.data.counts ?? {};
+      return {
+        pending: counts.pending ?? 0,
+        running: counts.running ?? 0,
+        done: counts.done ?? 0,
+        failed: counts.failed ?? 0,
+        total: response.data.total ?? 0,
+      };
+    } catch (err) {
+      console.error(err);
+      return { pending: 0, running: 0, done: 0, failed: 0, total: 0 };
+    }
+  }, [queueId]);
 
   return {
+    queueReady: hasQueue,
     questions,
     judges,
     selectedJudges,
     loading,
     error,
-    handleAssign,
     toggleJudge,
+    saveAssignments,
+    refreshQuestions: fetchQuestions,
     fetchJobStatus,
   };
-};
+}

@@ -21,8 +21,6 @@ async def _call_groq(groq_client: AsyncGroq, model: str, prompt: str):
     )
 
 async def _call_openai(openai_client: AsyncOpenAI, model: str, prompt: str):
-    if AsyncOpenAI is None:
-        raise NotImplementedError("OpenAI not installed")
     return await openai_client.chat.completions.create(
         model=model,
         messages=[{ "role": "user", "content": prompt }],

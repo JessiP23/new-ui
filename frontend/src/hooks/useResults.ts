@@ -1,84 +1,117 @@
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useCallback, useEffect, useState } from 'react';
+import { apiClient, buildQuery } from '../lib/api';
+import type { Evaluation, Judge, ResultsFilters } from '../types';
+import { safeAsync } from '../utils/safeAsync';
 
-const API_BASE = 'http://localhost:8000';
-
-interface Evaluation {
-  id: string;
-  submission_id: string;
-  question_id: string;
-  judge_id: string;
-  verdict: string;
-  reasoning: string;
-  created_at: string;
-  judges?: { name: string };
+interface EvaluationsResponse {
+  evaluations: Evaluation[];
+  total: number;
 }
 
-interface Judge {
-  id: string;
-  name: string;
-}
+const initialFilters: ResultsFilters = {
+  judge_ids: [],
+  question_ids: [],
+  verdict: '',
+  page: 1,
+  limit: 50,
+  queue_id: undefined,
+};
 
-export const useResults = () => {
+export function useResults() {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
-  const [filters, setFilters] = useState({ judge_ids: [] as string[], question_ids: [] as string[], verdict: '', page: 1, limit: 50, queue_id: '' });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [total, setTotal] = useState(0);
+  const [filters, setFilters] = useState<ResultsFilters>(initialFilters);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
+  const [total, setTotal] = useState<number>(0);
   const [judges, setJudges] = useState<Judge[]>([]);
   const [questions, setQuestions] = useState<string[]>([]);
 
-  useEffect(() => {
-    fetchJudges();
+  const fetchJudges = useCallback(async () => {
+    const { data: response } = await safeAsync(
+      () => apiClient.get<Judge[]>('/judges'),
+      (err) => console.error('Failed to fetch judges', err),
+    );
+    if (!response) {
+      return;
+    }
+    const nextJudges = response.data ?? [];
+    setJudges((prev) => {
+      const prevJson = JSON.stringify(prev);
+      const nextJson = JSON.stringify(nextJudges);
+      return prevJson === nextJson ? prev : nextJudges;
+    });
   }, []);
 
-  useEffect(() => {
-    if (filters.queue_id) {
-      fetchQuestions();
-    }
-  }, [filters.queue_id]);
+  const fetchQuestions = useCallback(
+    async (queueId?: string) => {
+      if (!queueId) {
+        setQuestions((prev) => (prev.length === 0 ? prev : []));
+        return;
+      }
+      const { data: response } = await safeAsync(
+        () => apiClient.get<string[]>(`/queue/questions?queue_id=${queueId}`),
+        (err) => console.error('Failed to fetch questions', err),
+      );
+      if (!response) {
+        return;
+      }
+      const nextQuestions = response.data ?? [];
+      setQuestions((prev) => {
+        const prevJson = JSON.stringify(prev);
+        const nextJson = JSON.stringify(nextQuestions);
+        return prevJson === nextJson ? prev : nextQuestions;
+      });
+    },
+    [],
+  );
 
-  useEffect(() => {
-    fetchEvaluations();
+  const fetchEvaluations = useCallback(async () => {
+    setLoading((prev) => (prev ? prev : true));
+
+    const query = buildQuery({
+      queue_id: filters.queue_id,
+      judge_id: filters.judge_ids,
+      question_id: filters.question_ids,
+      verdict: filters.verdict,
+      page: filters.page,
+      limit: filters.limit,
+    });
+
+    const { data: response, error: requestError } = await safeAsync(
+      () => apiClient.get<EvaluationsResponse>(`/evaluations${query}`),
+      (err) => console.error('Failed to fetch evaluations', err),
+    );
+
+    if (!response || requestError) {
+      setError((prev) => (prev === 'Failed to fetch evaluations' ? prev : 'Failed to fetch evaluations'));
+      setLoading((prev) => (prev ? false : prev));
+      return;
+    }
+
+    const rows = response.data.evaluations ?? [];
+    const totalRows = response.data.total ?? 0;
+
+    setEvaluations((prev) => {
+      const prevJson = JSON.stringify(prev);
+      const nextJson = JSON.stringify(rows);
+      return prevJson === nextJson ? prev : rows;
+    });
+    setTotal((prev) => (prev === totalRows ? prev : totalRows));
+    setError((prev) => (prev === '' ? prev : ''));
+    setLoading((prev) => (prev ? false : prev));
   }, [filters]);
 
-  const fetchJudges = async () => {
-    try {
-      const response = await axios.get(`${API_BASE}/judges`);
-      setJudges(response.data);
-    } catch (err: any) {
-      console.error('Failed to fetch judges');
-    }
-  };
+  useEffect(() => {
+    void fetchJudges();
+  }, [fetchJudges]);
 
-  const fetchQuestions = async () => {
-    try {
-      const response = await axios.get(`${API_BASE}/questions?queue_id=${filters.queue_id}`);
-      setQuestions(response.data);
-    } catch (err: any) {
-      console.error('Failed to fetch questions');
-    }
-  };
+  useEffect(() => {
+    void fetchQuestions(filters.queue_id);
+  }, [fetchQuestions, filters.queue_id]);
 
-  const fetchEvaluations = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      filters.judge_ids.forEach(id => params.append('judge_id', id));
-      filters.question_ids.forEach(id => params.append('question_id', id));
-      if (filters.verdict) params.append('verdict', filters.verdict);
-      if (filters.queue_id) params.append('queue_id', filters.queue_id);
-      params.append('page', filters.page.toString());
-      params.append('limit', filters.limit.toString());
-      const response = await axios.get(`${API_BASE}/evaluations?${params}`);
-      setEvaluations(response.data.evaluations);
-      setTotal(response.data.total);
-    } catch (err: any) {
-      setError('Failed to fetch evaluations');
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    void fetchEvaluations();
+  }, [fetchEvaluations]);
 
   return {
     evaluations,
@@ -90,4 +123,4 @@ export const useResults = () => {
     judges,
     questions,
   };
-};
+}

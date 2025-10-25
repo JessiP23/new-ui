@@ -1,50 +1,67 @@
 import { useState } from 'react';
-import axios from 'axios';
+import { apiClient } from '../lib/api';
 
-const API_BASE = 'http://localhost:8000';
+interface UseUploadOptions {
+  onComplete?: (queueId: string, message: string) => void;
+}
 
-export const useUpload = (navigate: any, setCurrentStep: any, setLastQueueId: any) => {
-  const [jsonText, setJsonText] = useState('');
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
+interface UploadState {
+  jsonText: string;
+  message: string;
+  loading: boolean;
+}
 
-  const onDrop = (acceptedFiles: any) => {
+export function useUpload(options?: UseUploadOptions) {
+  const [state, setState] = useState<UploadState>({ jsonText: '', message: '', loading: false });
+  const setJsonText = (value: string) => setState((prev) => ({ ...prev, jsonText: value }));
+
+  const onDrop = (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setJsonText(e.target?.result as string);
+    reader.onload = (event) => {
+      const result = typeof event.target?.result === 'string' ? event.target.result : '';
+      setJsonText(result);
     };
     reader.readAsText(file);
   };
 
   const handleJsonSubmit = async () => {
-    setLoading(true);
-    setMessage('');
+    setState((prev) => ({ ...prev, loading: true, message: '' }));
     try {
-      const parsed = JSON.parse(jsonText);
-      if (!Array.isArray(parsed)) throw new Error('Input must be a JSON array of submissions.');
-      if (parsed.length === 0) throw new Error('Array cannot be empty.');
-      if (!parsed[0]?.queueId) throw new Error('First submission must have a queueId to determine the queue.');
-      const response = await axios.post(`${API_BASE}/upload`, parsed);
-      setMessage(response.data.message);
-      const queueId = parsed[0].queueId;
-      setLastQueueId(queueId);
-      setCurrentStep('judges');
-      navigate('/judges');
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || error.message || 'An unexpected error occurred.';
-      setMessage(`Upload failed: ${errorMsg}`);
+      const parsed = JSON.parse(state.jsonText);
+      if (!Array.isArray(parsed)) {
+        throw new Error('Input must be a JSON array of submissions.');
+      }
+      if (parsed.length === 0) {
+        throw new Error('Array cannot be empty.');
+      }
+      const [first] = parsed;
+      if (!first?.queueId) {
+        throw new Error('First submission must include a queueId field.');
+      }
+
+      const response = await apiClient.post('/submissions', parsed);
+      const queueId: string = first.queueId;
+      const message: string = response.data?.message ?? 'Upload complete';
+      setState((prev) => ({ ...prev, message }));
+      options?.onComplete?.(queueId, message);
+    } catch (error: unknown) {
+      const detail =
+        error instanceof Error
+          ? error.message
+          : (error as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? 'Unexpected error';
+      setState((prev) => ({ ...prev, message: `Upload failed: ${detail}` }));
     } finally {
-      setLoading(false);
+      setState((prev) => ({ ...prev, loading: false }));
     }
   };
 
   return {
-    jsonText,
+    jsonText: state.jsonText,
+    message: state.message,
+    loading: state.loading,
     setJsonText,
-    message,
-    loading,
     onDrop,
     handleJsonSubmit,
   };
-};
+}

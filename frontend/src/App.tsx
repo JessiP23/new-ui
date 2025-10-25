@@ -1,9 +1,10 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
-import Upload from './components/Upload';
-import Judges from './components/Judges';
-import Queue from './components/Queue';
-import Results from './components/Results';
+import DashboardPage from './pages/DashboardPage';
+import UploadPage from './pages/UploadPage';
+import JudgesPage from './pages/JudgesPage';
+import QueuePage from './pages/QueuePage';
+import ResultsPage from './pages/ResultsPage';
 import { WorkflowProvider } from './contexts/WorkflowContext';
 
 function App() {
@@ -12,11 +13,11 @@ function App() {
       <WorkflowProvider>
         <Layout>
           <Routes>
-            <Route path="/upload" element={<Upload />} />
-            <Route path="/judges" element={<Judges />} />
-            <Route path="/queue" element={<Queue />} />
-            <Route path="/results" element={<Results />} />
-            <Route path="/" element={<Upload />} />
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/upload" element={<UploadPage />} />
+            <Route path="/judges" element={<JudgesPage />} />
+            <Route path="/queue" element={<QueuePage />} />
+            <Route path="/results" element={<ResultsPage />} />
           </Routes>
         </Layout>
       </WorkflowProvider>
