@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Table, type TableColumn } from '../components/ui/Table';
-import { useWorkflow } from '../contexts/WorkflowContext';
+import { useWorkflow } from '../contexts/workflowContext';
 import { useJudges } from '../hooks/useJudges';
 import type { Judge } from '../types';
 import { promptTemplates } from '../lib/dataAnnotation';
@@ -59,11 +59,11 @@ export default function JudgesPage() {
         setEditingId(judge.id);
     };
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = useCallback(async (id: string) => {
         if (window.confirm('Delete this judge?')) {
             await deleteJudge(id);
         }
-    };
+    }, [deleteJudge]);
 
     const columns: TableColumn<Judge>[] = useMemo(
         () => [
@@ -85,7 +85,7 @@ export default function JudgesPage() {
                 </div>
                 ),
             },
-        ],[],
+        ],[handleDelete],
     );
 
     return (

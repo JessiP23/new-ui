@@ -115,14 +115,8 @@ export function useResults() {
   }, [fetchQuestions, filters.queue_id]);
 
   useEffect(() => {
-    if (!filters.queue_id) {
-      setEvaluations([]);
-      setTotal(0);
-      setLoading(false);
-      return;
-    }
     void fetchEvaluations();
-  }, [fetchEvaluations, filters.queue_id]);
+  }, [fetchEvaluations]);
 
   return {
     evaluations,

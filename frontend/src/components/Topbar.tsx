@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useWorkflow } from '../contexts/WorkflowContext';
+import { useWorkflow } from '../contexts/workflowContext';
 import { cn } from '../lib/cn';
 import { steps } from '../lib/dataAnnotation';
 

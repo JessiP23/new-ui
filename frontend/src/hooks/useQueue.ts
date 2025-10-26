@@ -152,8 +152,9 @@ export function useQueue(queueId?: string) {
       const exists = current.includes(judgeId);
       const next = exists ? current.filter((id) => id !== judgeId) : [...current, judgeId];
       if (!next.length) {
-        const { [questionId]: _removed, ...rest } = prev;
-        return rest;
+        const nextState = { ...prev };
+        delete nextState[questionId];
+        return nextState;
       }
       return { ...prev, [questionId]: next };
     });

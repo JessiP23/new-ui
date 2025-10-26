@@ -5,7 +5,7 @@ import UploadPage from './pages/UploadPage';
 import JudgesPage from './pages/JudgesPage';
 import QueuePage from './pages/QueuePage';
 import ResultsPage from './pages/ResultsPage';
-import { WorkflowProvider } from './contexts/WorkflowContext';
+import { WorkflowProvider } from './contexts/WorkflowProvider';
 
 function App() {
   return (

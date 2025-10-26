@@ -1,29 +1,46 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
-import { FilterBar } from '../components/ui/FilterBar';
 import { Loading } from '../components/ui/Loading';
 import { Table, type TableColumn } from '../components/ui/Table';
-import { useWorkflow } from '../contexts/WorkflowContext';
+import { ResultsFiltersBar } from '../components/results/ResultsFiltersBar';
+import { useWorkflow } from '../contexts/workflowContext';
 import { useResults } from '../hooks/useResults';
-import type { Evaluation, Judge, Verdict } from '../types';
+import type { Evaluation, ResultsFilters } from '../types';
+import { buildSearchParams, DEFAULT_RESULTS_FILTERS, filtersEqual, parseFiltersFromSearch } from '../utils/resultsFilters';
 
 export default function ResultsPage() {
-    const { setCurrentStep, markCompleted, lastQueueId } = useWorkflow();
-    const { evaluations, filters, setFilters, loading, error, total, judges, questions, passCount } = useResults();
+    const { setCurrentStep, markCompleted } = useWorkflow();
+    const { evaluations, filters, setFilters: setFiltersInternal, loading, error, total, judges, questions, passCount } = useResults();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const searchKey = searchParams.toString();
+    const parsedFilters = useMemo(() => parseFiltersFromSearch(searchParams), [searchParams]);
+
+    const setFilters = useCallback<Dispatch<SetStateAction<ResultsFilters>>>(
+        (value) => {
+            setFiltersInternal((prev) => {
+                const next = typeof value === 'function' ? (value as (current: ResultsFilters) => ResultsFilters)(prev) : value;
+                const params = buildSearchParams(next);
+                if (params.toString() !== searchKey) {
+                    setSearchParams(params, { replace: true });
+                }
+                return next;
+            });
+        },
+        [searchKey, setFiltersInternal, setSearchParams],
+    );
 
     useEffect(() => {
         setCurrentStep('results');
-        setFilters((prev) => {
-            const nextQueueId = lastQueueId || prev.queue_id;
-            if (prev.queue_id === nextQueueId) {
-                return prev;
-            }
-            return { ...prev, queue_id: nextQueueId };
-        });
         markCompleted('results');
-    }, [lastQueueId, markCompleted, setCurrentStep, setFilters]);
+    }, [markCompleted, setCurrentStep]);
+
+    useEffect(() => {
+        setFiltersInternal((prev) => (filtersEqual(prev, parsedFilters) ? prev : { ...prev, ...parsedFilters }));
+    }, [parsedFilters, setFiltersInternal]);
 
     const passRate = total ? ((passCount / total) * 100).toFixed(1) : '0.0'; // REFACTORED by GPT-5 — use aggregate counts from backend
 
@@ -48,11 +65,13 @@ export default function ResultsPage() {
         },
     ];
 
-    const toggleFilter = (value: string, list: string[]) => {
-        return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
-    };
-
-    const verdictOptions: Array<'' | Verdict> = ['', 'pass', 'fail', 'inconclusive'];
+    const handleClearFilters = useCallback(() => {
+        setFilters({
+            ...DEFAULT_RESULTS_FILTERS,
+            limit: filters.limit,
+            queue_id: parsedFilters.queue_id,
+        });
+    }, [filters.limit, parsedFilters.queue_id, setFilters]);
 
     return (
         <div className="flex flex-col gap-6">
@@ -64,82 +83,7 @@ export default function ResultsPage() {
                 <div className="rounded-full bg-slate-100 px-4 py-1 text-sm text-slate-600">Pass rate: {passRate}% ({passCount} of {total})</div>
             </div>
 
-            <FilterBar
-                title="Filters"
-                actions={
-                    <Button
-                        variant="pill"
-                        size="sm"
-                        onClick={() =>
-                            setFilters({
-                                judge_ids: [],
-                                question_ids: [],
-                                verdict: '',
-                                page: 1,
-                                limit: filters.limit,
-                                queue_id: lastQueueId,
-                            })
-                        }
-                    >
-                        Clear filters
-                    </Button>
-                }
-            >
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                    {(judges || []).map((judge: Judge) => {
-                        const active = filters.judge_ids.includes(judge.id);
-                        return (
-                            <Button
-                                key={judge.id}
-                                variant={active ? 'primary' : 'pill'}
-                                size="sm"
-                                onClick={() =>
-                                setFilters((prev) => ({
-                                    ...prev,
-                                    page: 1,
-                                    judge_ids: toggleFilter(judge.id, prev.judge_ids),
-                                }))
-                                }
-                            >
-                                {judge.name}
-                            </Button>
-                        );
-                    })}
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                    {questions.map((questionId) => {
-                        const active = filters.question_ids.includes(questionId);
-                        return (
-                            <Button
-                                key={questionId}
-                                variant={active ? 'primary' : 'pill'}
-                                size="sm"
-                                onClick={() =>
-                                setFilters((prev) => ({
-                                    ...prev,
-                                    page: 1,
-                                    question_ids: toggleFilter(questionId, prev.question_ids),
-                                }))
-                                }
-                            >
-                                {questionId}
-                            </Button>
-                        );
-                    })}
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                    {verdictOptions.map((verdictOption) => (
-                        <Button
-                            key={verdictOption || 'all'}
-                            variant={filters.verdict === verdictOption ? 'primary' : 'pill'}
-                            size="sm"
-                            onClick={() => setFilters((prev) => ({ ...prev, page: 1, verdict: verdictOption }))}
-                        >
-                            {verdictOption ? verdictOption.charAt(0).toUpperCase() + verdictOption.slice(1) : 'All verdicts'}
-                        </Button>
-                    ))}
-                </div>
-            </FilterBar>
+            <ResultsFiltersBar filters={filters} judges={judges} questions={questions} setFilters={setFilters} onClear={handleClearFilters} />
 
             <Card>
                 {loading ? (

@@ -91,6 +91,7 @@ async def add_submission_attachments(
     submission_id: str,
     files: List[UploadFile] = File(...),
     supabase: Client = Depends(get_supabase_client),
+    persist: bool = Query(True, description="Persist attachment metadata to the submission row"),
 ):
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
@@ -100,12 +101,15 @@ async def add_submission_attachments(
         result = await upload_submission_attachments(supabase, submission_id, upload_file)
         uploads.append(result)
 
-    try:
-        existing_resp = supabase.table("submissions").select("attachments").eq("id", submission_id).limit(1).execute()
-        existing = (existing_resp.data or [{}])[0].get("attachments") or []
-        meta_payload = existing + [generate_attachment_metadata(item) for item in uploads]
-        supabase.table("submissions").update({"attachments": meta_payload}).eq("id", submission_id).execute()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail="Failed to persist attachment metadata") from exc
+    metadata = [generate_attachment_metadata(item) for item in uploads]
 
-    return {"attachments": uploads}
+    if persist:
+        try:
+            existing_resp = supabase.table("submissions").select("attachments").eq("id", submission_id).limit(1).execute()
+            existing = (existing_resp.data or [{}])[0].get("attachments") or []
+            meta_payload = existing + metadata
+            supabase.table("submissions").update({"attachments": meta_payload}).eq("id", submission_id).execute()
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="Failed to persist attachment metadata") from exc
+
+    return {"attachments": metadata}

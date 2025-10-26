@@ -4,7 +4,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Loading } from '../components/ui/Loading';
-import { useWorkflow } from '../contexts/WorkflowContext';
+import { useWorkflow } from '../contexts/workflowContext';
 import { useQueue } from '../hooks/useQueue';
 import { useRunner } from '../hooks/useRunner';
 

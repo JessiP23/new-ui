@@ -124,6 +124,33 @@ Run those before recording the final demo. Add `npm run lint` for full ESLint co
 - **Concurrency safety** – For large queues, consider moving job creation to Supabase functions or a background queue worker to avoid API timeout on `/queue/run`.
 - **Voice-over demo** – Recommended once features are stable: walk through upload → judge CRUD → assignments → run → results, narrating trade-offs and known gaps.
 
+## Attachments & Results filters (this run)
+
+Changes made in this pass (conservative, in-place):
+
+- Frontend `Upload` flow now accepts attachments (images, PDFs, text, zip) alongside the JSON payload. The UI allows per-file mapping to a submission id or a default mapping to the first submission if unspecified.
+- Backend already included `POST /submissions/{submission_id}/attachments` and storage helpers; the frontend now uses that endpoint to upload files after creating submissions so binary data is stored in the `attachments` bucket and only metadata (filename, url, content_type, id) lives with the submission row.
+- `Results` page filters are now independent of Dashboard state: initial `queue_id` can be read from the URL query param `?queue_id=...` and all filter interactions are local to the Results page (bookmarkable and decoupled from Dashboard controls).
+
+How attachments work (summary):
+
+1. User provides a JSON array of submissions and optionally selects attachments via the Upload page file picker.
+2. The Upload UI presents a small mapping helper that lets the operator map each file to a submission id or choose the default "attach to first submission".
+3. On Upload, the frontend posts the submissions array to `POST /submissions` (no binaries). After the submissions are persisted, the frontend posts each mapped file to `POST /submissions/{submission_id}/attachments` (multipart form data). The server stores the file in the configured Supabase storage bucket and updates the submission row with attachments metadata (no binary in DB).
+
+Why this approach?
+
+- Minimal backend surface change: we reuse the existing `add_submission_attachments` endpoint and storage helpers. No schema migrations were required.
+- Conservative default mapping: attaching to the first submission is predictable and avoids expensive duplicate writes; operators can map files explicitly when needed.
+- Attachments are stored as signed URLs in Supabase storage. This keeps DB size small and lets the runner/LLM include the signed URL in prompts or forward it to providers as needed.
+
+Tradeoffs & future work (attachments):
+
+- Automatic mapping heuristics could be improved (filename parsing, embedded metadata, or drag-to-map UI). For now we perform a filename substring match and default to the first submission.
+- As an enhancement, consider adding a `attachments` table and foreign keys to submissions for stronger integrity and searchability (pros: indexing, dedup; cons: migration work).
+- If you need attachments to be visible to unauthenticated LLM runners, consider making the signed URL TTL short and generating ephemeral provider-facing upload tokens.
+
+
 ## Submission checklist
 
 - [ ] Backend & worker running locally with Supabase credentials set.
