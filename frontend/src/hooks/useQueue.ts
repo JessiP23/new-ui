@@ -5,6 +5,14 @@ import type { Assignment, Judge, JobStatusCounts } from '../types';
 
 type SelectedJudgesMap = Record<string, string[]>;
 
+interface AssignmentSummary {
+  queue_id: string;
+  assignment_set_id: string;
+  assignments_count: number;
+  submissions_count: number;
+  expected_evaluations: number;
+}
+
 export function useQueue(queueId?: string) {
   const [questions, setQuestions] = useState<string[]>([]);
   const [judges, setJudges] = useState<Judge[]>([]);
@@ -12,6 +20,7 @@ export function useQueue(queueId?: string) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [assignmentsSaved, setAssignmentsSaved] = useState<boolean>(false);
+  const [assignmentSummary, setAssignmentSummary] = useState<AssignmentSummary | null>(null); // REFACTORED by GPT-5 — preserve backend summary details
   const lastLoadedQueueRef = useRef<string | null>(null);
 
   const fetchJudges = useCallback(async () => {
@@ -88,6 +97,7 @@ export function useQueue(queueId?: string) {
       setQuestions([]);
       setSelectedJudges({});
       setAssignmentsSaved(false);
+      setAssignmentSummary(null); // REFACTORED by GPT-5 — reset summary when queue changes
       return;
     }
 
@@ -97,6 +107,7 @@ export function useQueue(queueId?: string) {
 
     lastLoadedQueueRef.current = queueId;
     setAssignmentsSaved(false);
+    setAssignmentSummary(null);
     void fetchQuestions(queueId);
   }, [queueId, fetchQuestions]);
 
@@ -116,10 +127,11 @@ export function useQueue(queueId?: string) {
       }, []);
     });
 
-    const { error: requestError } = await safeAsync(() => apiClient.post('/queue/assignments', payload));
+    const { data: response, error: requestError } = await safeAsync(() => apiClient.post('/queue/assignments', payload));
     if (requestError) {
       console.error(requestError);
       setError('Failed to save assignments');
+      setAssignmentSummary(null); // REFACTORED by GPT-5 — clear summary on failure
       return;
     }
 
@@ -127,7 +139,10 @@ export function useQueue(queueId?: string) {
     setAssignmentsSaved(payload.length > 0);
     if (!payload.length) {
       setSelectedJudges({});
+      setAssignmentSummary(null);
     }
+    const summary = (response?.data as { summary?: AssignmentSummary })?.summary;
+    setAssignmentSummary(summary ?? null);
     await fetchAssignments(queueId);
   }, [fetchAssignments, questions, queueId, selectedJudges]);
 
@@ -180,5 +195,6 @@ export function useQueue(queueId?: string) {
     refreshQuestions: fetchQuestions,
     fetchJobStatus,
     assignmentsSaved,
+    assignmentSummary,
   };
 }

@@ -2,6 +2,17 @@ from typing import Dict, Any, Optional
 from fastapi import HTTPException
 from supabase import Client
 
+def _apply_filters(query, submission_ids, judge_ids, question_ids, verdict):
+    if submission_ids is not None:
+        query = query.in_("submission_id", submission_ids)
+    if judge_ids:
+        query = query.in_("judge_id", judge_ids)
+    if question_ids:
+        query = query.in_("question_id", question_ids)
+    if verdict:
+        query = query.eq("verdict", verdict)
+    return query
+
 def fetch_evaluations(
     supabase: Client,
     queue_id: Optional[str] = None,
@@ -11,27 +22,36 @@ def fetch_evaluations(
     page: int = 1,
     limit: int = 50,
 ) -> Dict[str, Any]:
-    query = supabase.table("evaluations").select("*", count="exact")
-
+    submission_ids: Optional[list[str]] = None
     if queue_id:
         subs = supabase.table("submissions").select("id").eq("queue_id", queue_id).execute()
         submission_ids = [s["id"] for s in subs.data or []]
         if not submission_ids:
-            return {"evaluations": [], "total": 0}
-        query = query.in_("submission_id", submission_ids)
+            return {"evaluations": [], "total": 0, "pass_count": 0, "pass_rate": 0.0}
 
-    if judge_ids:
-        query = query.in_("judge_id", judge_ids)
-
-    if question_ids:
-        query = query.in_("question_id", question_ids)
-
-    if verdict:
-        query = query.eq("verdict", verdict)
+    query = supabase.table("evaluations").select("*", count="exact")
+    query = _apply_filters(query, submission_ids, judge_ids, question_ids, verdict)  # REFACTORED by GPT-5 — reuse filters for paginated query
 
     offset = (page - 1) * limit
     response = query.range(offset, offset + limit - 1).execute()
     if response.data is None:
         raise HTTPException(status_code=500, detail="Failed to fetch evaluations")
 
-    return {"evaluations": response.data, "total": response.count or 0}
+    total = response.count or 0
+    if verdict and verdict != "pass":
+        pass_count = 0  # REFACTORED by GPT-5 — verdict filter excludes pass rows
+    elif verdict == "pass":
+        pass_count = total  # REFACTORED by GPT-5 — all paginated rows are pass verdicts
+    else:
+        pass_query = supabase.table("evaluations").select("id", count="exact")
+        pass_query = _apply_filters(pass_query, submission_ids, judge_ids, question_ids, verdict=None)  # REFACTORED by GPT-5 — aggregate pass count across filters
+        pass_response = pass_query.eq("verdict", "pass").execute()
+        pass_count = pass_response.count or 0
+    pass_rate = round((pass_count / total) * 100, 1) if total else 0.0
+
+    return {
+        "evaluations": response.data,
+        "total": total,
+        "pass_count": pass_count,
+        "pass_rate": pass_rate,
+    }

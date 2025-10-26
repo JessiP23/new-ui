@@ -22,6 +22,7 @@ export default function QueuePage() {
         toggleJudge,
         saveAssignments,
         assignmentsSaved,
+        assignmentSummary,
     } = useQueue(lastQueueId);
     const { running, progress, message, counts, runEvaluations } = useRunner(lastQueueId);
 
@@ -158,6 +159,15 @@ export default function QueuePage() {
                                 </div>
                             }
                         >
+                            {assignmentSummary ? (
+                                <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                                    <p className="font-medium text-slate-700">Saved assignment set</p>
+                                    <p>
+                                        {assignmentSummary.assignments_count} judge slots × {assignmentSummary.submissions_count} submissions →{' '}
+                                        <strong>{assignmentSummary.expected_evaluations}</strong> planned evaluations
+                                    </p>
+                                </div>
+                            ) : null /* REFACTORED by GPT-5 — surface backend summary for clarity */}
                             {counts ? (
                                 <div className="space-y-3 text-sm text-slate-600">
                                     <div className="flex justify-between">

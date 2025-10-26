@@ -11,7 +11,7 @@ import type { Evaluation, Judge, Verdict } from '../types';
 
 export default function ResultsPage() {
     const { setCurrentStep, markCompleted, lastQueueId } = useWorkflow();
-    const { evaluations, filters, setFilters, loading, error, total, judges, questions } = useResults();
+    const { evaluations, filters, setFilters, loading, error, total, judges, questions, passCount } = useResults();
 
     useEffect(() => {
         setCurrentStep('results');
@@ -25,7 +25,7 @@ export default function ResultsPage() {
         markCompleted('results');
     }, [lastQueueId, markCompleted, setCurrentStep, setFilters]);
 
-    const passRate = evaluations.length ? ((evaluations.filter((evaluation) => evaluation.verdict === 'pass').length / evaluations.length) * 100).toFixed(1) : '0.0';
+    const passRate = total ? ((passCount / total) * 100).toFixed(1) : '0.0'; // REFACTORED by GPT-5 — use aggregate counts from backend
 
     const columns: TableColumn<Evaluation>[] = [
         { key: 'submission_id', header: 'Submission' },
@@ -61,7 +61,7 @@ export default function ResultsPage() {
                     <h1 className="text-2xl font-semibold text-slate-900">Results</h1>
                     <p className="text-sm text-slate-500">Inspect verdicts, reasoning, and judge performance across the queue.</p>
                 </div>
-                <div className="rounded-full bg-slate-100 px-4 py-1 text-sm text-slate-600">Pass rate: {passRate}%</div>
+                <div className="rounded-full bg-slate-100 px-4 py-1 text-sm text-slate-600">Pass rate: {passRate}% ({passCount} of {total})</div>
             </div>
 
             <FilterBar

@@ -6,6 +6,8 @@ import { safeAsync } from '../utils/safeAsync';
 interface EvaluationsResponse {
   evaluations: Evaluation[];
   total: number;
+  pass_count?: number;
+  pass_rate?: number;
 }
 
 const initialFilters: ResultsFilters = {
@@ -23,6 +25,7 @@ export function useResults() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [total, setTotal] = useState<number>(0);
+  const [passCount, setPassCount] = useState<number>(0); // REFACTORED by GPT-5 — track aggregate pass results
   const [judges, setJudges] = useState<Judge[]>([]);
   const [questions, setQuestions] = useState<string[]>([]);
 
@@ -90,6 +93,7 @@ export function useResults() {
 
     const rows = response.data.evaluations ?? [];
     const totalRows = response.data.total ?? 0;
+    const passes = response.data.pass_count ?? 0;
 
     setEvaluations((prev) => {
       const prevJson = JSON.stringify(prev);
@@ -97,6 +101,7 @@ export function useResults() {
       return prevJson === nextJson ? prev : rows;
     });
     setTotal((prev) => (prev === totalRows ? prev : totalRows));
+    setPassCount((prev) => (prev === passes ? prev : passes));
     setError('');
     setLoading(false);
   }, [filters]);
@@ -128,5 +133,6 @@ export function useResults() {
     total,
     judges,
     questions,
+    passCount,
   };
 }

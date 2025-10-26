@@ -43,25 +43,45 @@ def _fetch_existing_evaluation(supabase: Client, payload: Dict[str, Any]) -> Opt
 
 
 def _upsert_evaluation(supabase: Client, payload: Dict[str, Any]) -> None:
-    existing = _fetch_existing_evaluation(supabase, payload)
+    identity = {
+        "submission_id": payload["submission_id"],
+        "question_id": payload["question_id"],
+        "judge_id": payload["judge_id"],
+    }
+
+    existing = _fetch_existing_evaluation(supabase, identity)
+    timestamp = datetime.now(timezone.utc).isoformat()
 
     if not existing:
-        supabase.table("evaluations").insert(payload, returning="minimal").execute()
+        insert_payload: Dict[str, Any] = {**payload, **identity}
+        insert_payload.setdefault("created_at", timestamp)
+        if payload.get("queue_id") is not None:
+            insert_payload["queue_id"] = payload["queue_id"]
+        supabase.table("evaluations").upsert(
+            insert_payload,
+            on_conflict="submission_id,question_id,judge_id",
+        ).execute()
         return
 
     tracked_fields = ("verdict", "reasoning", "reasoning_simhash")
-    has_changes = any(payload.get(field) != existing.get(field) for field in tracked_fields)
+    changes: Dict[str, Any] = {
+        field: payload[field]
+        for field in tracked_fields
+        if field in payload and payload[field] != existing.get(field)
+    }
 
-    if not has_changes:
+    queue_id = payload.get("queue_id")
+    if queue_id and queue_id != existing.get("queue_id"):
+        changes["queue_id"] = queue_id
+
+    if not changes:
         return
 
-    update_payload = {field: payload[field] for field in tracked_fields if field in payload}
-    if payload.get("queue_id") and payload.get("queue_id") != existing.get("queue_id"):
-        update_payload["queue_id"] = payload["queue_id"]
-
-    update_payload["updated_at"] = datetime.now(timezone.utc).isoformat()
-
-    supabase.table("evaluations").update(update_payload).eq("id", existing["id"]).execute()
+    update_payload: Dict[str, Any] = {**identity, **changes, "updated_at": timestamp}
+    supabase.table("evaluations").upsert(
+        update_payload,
+        on_conflict="submission_id,question_id,judge_id",
+    ).execute()
 
 def _mark_job_failed(supabase: Client, job: Dict[str, Any], exc: Exception):
     attempts = (job.get("attempts") or 0) + 1

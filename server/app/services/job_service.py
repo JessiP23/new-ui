@@ -28,7 +28,11 @@ def get_job_status(supabase: Client, queue_id: str) -> Dict[str, Any]:
         counts[status] = resp.count or 0
     total_resp = supabase.table("judge_jobs").select("id", count="exact").eq("queue_id", queue_id).execute()
     total = total_resp.count or 0
-    return {"counts": counts, "total": total}
+    evaluations_resp = (
+        supabase.table("evaluations").select("id", count="exact").eq("queue_id", queue_id).execute()
+    )
+    evaluations_completed = evaluations_resp.count or 0
+    return {"counts": counts, "total": total, "completed_evaluations": evaluations_completed}
 
 def debug_queue(supabase: Client, queue_id: str) -> Dict[str, int]:
     tables = ["submissions", "assignments", "judge_jobs"]

@@ -11,16 +11,48 @@ def fetch_assignments(supabase: Client, queue_id: str) -> List[Dict[str, Any]]:
     rows = response.data or []
     return rows
 
-def save_assignments(supabase: Client, assignments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    payload = []
+def save_assignments(supabase: Client, assignments: List[Dict[str, Any]]) -> Dict[str, Any]:
+    payload: List[Dict[str, Any]] = []
+    queue_id: Optional[str] = None
+
     for assignment in assignments:
         data = dict(assignment)
         data.pop("id", None)
         data["judge_id"] = str(data["judge_id"])
+        queue_id = queue_id or data.get("queue_id")
         payload.append(data)
-    response = supabase.table("assignments").insert(payload).execute()
+
+    if not payload or not queue_id:
+        raise HTTPException(status_code=400, detail="Assignments must include a queue_id")
+
+    try:
+        supabase.table("assignments").delete().eq("queue_id", queue_id).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to reset assignments for queue") from exc
+
+    try:
+        response = supabase.table("assignments").insert(payload).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to save assignments") from exc
+
     rows = response.data or []
-    return rows
+
+    submissions_resp = (
+        supabase.table("submissions").select("id", count="exact").eq("queue_id", queue_id).execute()
+    )
+    submissions_count = submissions_resp.count or 0
+    assignments_count = len(payload)
+    expected_evaluations = submissions_count * assignments_count
+
+    summary = {
+        "queue_id": queue_id,
+        "assignment_set_id": str(uuid.uuid4()),
+        "assignments_count": assignments_count,
+        "submissions_count": submissions_count,
+        "expected_evaluations": expected_evaluations,
+    }
+
+    return {"assignments": rows, "summary": summary}
 
 def list_questions(supabase: Client, queue_id: str) -> List[str]:
     subs = supabase.table("submissions").select("data").eq("queue_id", queue_id).execute()
@@ -83,6 +115,8 @@ def enqueue_judge_jobs(queue_id: str, supabase: Client, settings: Settings) -> D
     return {
         "message": "Jobs enqueued",
         "enqueued": total_enqueued,
+        "expected_evaluations": total_enqueued,
+        "job_id": queue_id,
         "submissions_count": _count_records(supabase, "submissions", queue_id),
         "assignments_count": _count_records(supabase, "assignments", queue_id),
     }

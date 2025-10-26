@@ -6,6 +6,7 @@ import type { JobStatusCounts } from '../types';
 type StatusPayload = {
     counts?: Record<string, number>;
     total?: number;
+    completed_evaluations?: number;
 };
 
 interface RunnerState {
@@ -63,9 +64,10 @@ export function useRunner(queueId?: string) {
 
     useEffect(() => stopMonitoring, [stopMonitoring]);
 
-    const applyCounts = useCallback((counts: JobStatusCounts, message?: string) => {
+    const applyCounts = useCallback((counts: JobStatusCounts, message?: string, completed?: number) => {
             const progress = computeProgress(counts);
             const isComplete = counts.total > 0 && counts.pending + counts.running === 0;
+            const completedEvaluations = completed ?? counts.done + counts.failed; // REFACTORED by GPT-5 — surface completed evals when available
             setState((prev) => ({
                 ...prev,
                 counts,
@@ -74,8 +76,8 @@ export function useRunner(queueId?: string) {
                 message:
                     message ??
                     (isComplete
-                        ? `Processing complete — ${counts.done + counts.failed}/${counts.total} finished.`
-                        : prev.message),
+                        ? `Processing complete — ${completedEvaluations}/${counts.total} finished.`
+                        : `Monitoring progress — ${completedEvaluations}/${counts.total} done.`),
             }));
             if (isComplete) {
                 stopMonitoring();
@@ -131,7 +133,7 @@ export function useRunner(queueId?: string) {
                             counts: payload.counts ?? {},
                             total: payload.total ?? expectedTotal,
                         });
-                        applyCounts(counts);
+                        applyCounts(counts, undefined, payload.completed_evaluations);
                     } catch (err) {
                         console.error('Failed to parse SSE payload', err);
                     }
@@ -171,6 +173,7 @@ export function useRunner(queueId?: string) {
         }
 
         const enqueued = data?.data?.enqueued ?? 0;
+        const expectedEvaluations = data?.data?.expected_evaluations ?? enqueued; // REFACTORED by GPT-5 — align UI with backend expectations
         if (enqueued === 0) {
             setState({
                 running: false,
@@ -186,10 +189,10 @@ export function useRunner(queueId?: string) {
             running: 0,
             done: 0,
             failed: 0,
-            total: enqueued,
+            total: expectedEvaluations,
         };
-        applyCounts(initialCounts, `Enqueued ${enqueued} jobs — monitoring progress...`);
-        beginMonitoring(enqueued);
+        applyCounts(initialCounts, `Enqueued ${enqueued} jobs — monitoring progress across ${expectedEvaluations}.`);
+        beginMonitoring(expectedEvaluations);
         return { success: true, enqueued };
     }, [applyCounts, beginMonitoring, queueId, stopMonitoring]);
 
