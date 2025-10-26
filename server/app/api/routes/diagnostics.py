@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from supabase import Client
 from app.core.supabase import get_supabase_client
-from app.services.analytics_service import get_dashboard_summary
+from app.services.analytics_service import get_dashboard_summary, list_recent_queues
 from app.services.job_service import debug_queue, get_job_status, stream_live_status
 
 router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
@@ -20,6 +20,12 @@ def job_status(queue_id: str):
 def summary():
     supabase: Client = get_supabase_client()
     return get_dashboard_summary(supabase)
+
+@router.get("/queues")
+def recent_queues(limit: int = 15):
+    supabase: Client = get_supabase_client()
+    items = list_recent_queues(supabase, limit)
+    return {"queues": items}
 
 @router.get("/live_job_status")
 def live_job_status(queue_id: str):

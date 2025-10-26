@@ -13,7 +13,7 @@ Full-stack reference implementation for the Besimple AI Judge take-home. The pro
 | Persist verdicts + reasoning | ✅ | Evaluations upsert idempotently keyed by submission/question/judge |
 | Results view + filters + pass rate | ✅ | Results page streams paginated evaluations, multi-select filters, and backend-derived pass metrics |
 
-> Bonus ideas (attachments, prompt field toggles, charts) are described in [Trade-offs & future work](#trade-offs--future-work).
+> Bonus idea status: private attachments + live analytics dashboards are shipped. Prompt field toggles and rerun tooling remain on deck—see [Trade-offs & future work](#trade-offs--future-work).
 
 ## Stack & repository layout
 
@@ -42,6 +42,12 @@ Create the following tables (or mirror in Postgres):
 | `evaluations` | `id`, `queue_id`, `submission_id`, `question_id`, `judge_id`, `verdict`, `reasoning`, `reasoning_simhash`, `created_at`, `updated_at` |
 
 Add indexes on `(queue_id, status)` for `judge_jobs` and `(queue_id, judge_id)` for `evaluations` to keep polling fast.
+
+### 1b. Prepare Supabase storage
+
+- Create a private bucket named `attachments` in **Storage → Buckets**. (To customise the name, set `ATTACHMENTS_BUCKET` in `server/.env`.)
+- (Optional) Add explicit RLS policies so future authenticated clients can read/write signed URLs. See [`docs/supabase-storage.md`](docs/supabase-storage.md) for SQL snippets and a full walkthrough.
+- Add your frontend origin under **Authentication → Policies → CORS** so signed URLs can be fetched from the browser without preflight issues.
 
 ### 2. Backend (FastAPI + worker)
 
@@ -112,10 +118,9 @@ Run those before recording the final demo. Add `npm run lint` for full ESLint co
 
 ## Trade-offs & future work
 
-- **Attachments passthrough (bonus)** – Current schema stores JSON payloads only. To support file attachments, extend `submissions` with storage URLs, proxy uploads to Supabase Storage/S3, and forward signed URLs to providers that accept binary context.
-- **Prompt field toggles (bonus)** – Expose a per-judge prompt composer with checkboxes for question text, answer text, and metadata. Store preferences alongside judges and adjust `run_single_judge` to assemble prompts accordingly.
-- **Visual analytics (bonus)** – Results page could add animated charts (e.g., pass rate by judge over time) via Recharts/D3 fed by a `/analytics/pass_rate_by_judge` endpoint.
+- **Prompt field toggles** – Expose a per-judge prompt composer with checkboxes for question text, answer text, and metadata. Store preferences alongside judges and adjust `run_single_judge` to assemble prompts accordingly.
 - **Queue replays** – Implement a “rerun failed only” option that filters `judge_jobs` by `status='failed'` to conserve LLM spend on retries.
+- **Explainability overlays** – Layer SHAP-style explanations or rubric scoring breakdowns on top of the verdict distribution charts to help reviewers diagnose judge behaviour.
 - **Concurrency safety** – For large queues, consider moving job creation to Supabase functions or a background queue worker to avoid API timeout on `/queue/run`.
 - **Voice-over demo** – Recommended once features are stable: walk through upload → judge CRUD → assignments → run → results, narrating trade-offs and known gaps.
 

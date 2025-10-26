@@ -1,11 +1,12 @@
 import json
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from supabase import Client
 from app.models import Submission
 from app.services.fingerprint_service import simhash
 from app.core.supabase import get_supabase_client
 from app.core.config import get_settings
+from app.services.attachment_service import upload_submission_attachments, generate_attachment_metadata
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 
@@ -32,7 +33,7 @@ def _build_submission_record(item: dict) -> dict:
     except Exception:
         pass
 
-    return {
+    record = {
         "id": submission.id,
         "queue_id": submission.queueId,
         "labeling_task_id": submission.labelingTaskId,
@@ -46,6 +47,10 @@ def _build_submission_record(item: dict) -> dict:
         "answer_simhash": sh,
         "simhash_bucket": bucket,
     }
+
+    if submission.attachments:
+        record["attachments"] = [attachment.dict() for attachment in submission.attachments]
+    return record
 
 @router.post("")
 async def upload_submissions(data: List[dict]):
@@ -80,3 +85,27 @@ async def upload_submissions(data: List[dict]):
 @router.post("/upload", include_in_schema=False)
 async def legacy_upload(data: List[dict]):
     return await upload_submissions(data)
+
+@router.post("/{submission_id}/attachments")
+async def add_submission_attachments(
+    submission_id: str,
+    files: List[UploadFile] = File(...),
+    supabase: Client = Depends(get_supabase_client),
+):
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    uploads = []
+    for upload_file in files:
+        result = await upload_submission_attachments(supabase, submission_id, upload_file)
+        uploads.append(result)
+
+    try:
+        existing_resp = supabase.table("submissions").select("attachments").eq("id", submission_id).limit(1).execute()
+        existing = (existing_resp.data or [{}])[0].get("attachments") or []
+        meta_payload = existing + [generate_attachment_metadata(item) for item in uploads]
+        supabase.table("submissions").update({"attachments": meta_payload}).eq("id", submission_id).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to persist attachment metadata") from exc
+
+    return {"attachments": uploads}

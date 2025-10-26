@@ -66,3 +66,64 @@ export interface DashboardSummary {
   pass_rate: number;
   jobs: number;
 }
+
+export interface AnalyticsMeta {
+  queue_id: string;
+  from: number | null;
+  to: number | null;
+  interval: 'hour' | 'day' | 'week' | 'month';
+  judges: number;
+}
+
+export interface AnalyticsPoint {
+  ts: number;
+  pass: number;
+  fail: number;
+  inconclusive: number;
+  total: number;
+  pass_rate: number;
+  cumulative_pass_rate: number;
+  cumulative_total: number;
+}
+
+export interface JudgeTotals {
+  pass: number;
+  fail: number;
+  inconclusive: number;
+  total: number;
+  pass_rate: number;
+}
+
+export interface JudgeSeries {
+  judge_id: string;
+  judge_name: string;
+  totals: JudgeTotals;
+  points: AnalyticsPoint[];
+}
+
+export interface JudgeRanking {
+  judge_id: string;
+  judge_name: string;
+  total: number;
+  pass_rate: number;
+}
+
+export interface AnalyticsTotals {
+  total_evals: number;
+  pass_count: number;
+  pass_rate: number;
+}
+
+export interface AnalyticsResponse {
+  meta: AnalyticsMeta;
+  series: JudgeSeries[];
+  totals: AnalyticsTotals;
+  rankings: JudgeRanking[];
+  timeline: AnalyticsPoint[];
+}
+
+export interface QueueOption {
+  queue_id: string;
+  created_at?: string;
+  evaluation_count?: number;
+}
