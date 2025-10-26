@@ -131,7 +131,7 @@ export default function ResultsPage() {
                     {verdictOptions.map((verdictOption) => (
                         <Button
                             key={verdictOption || 'all'}
-                            variant='pill'
+                            variant={filters.verdict === verdictOption ? 'primary' : 'pill'}
                             size="sm"
                             onClick={() => setFilters((prev) => ({ ...prev, page: 1, verdict: verdictOption }))}
                         >

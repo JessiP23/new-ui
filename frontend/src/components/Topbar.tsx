@@ -1,14 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useWorkflow } from '../contexts/WorkflowContext';
 import { cn } from '../lib/cn';
-
-const steps = [
-  { key: 'dashboard', label: 'Dashboard', path: '/' },
-  { key: 'upload', label: 'Upload', path: '/upload' },
-  { key: 'judges', label: 'Judges', path: '/judges' },
-  { key: 'queue', label: 'Queue', path: '/queue' },
-  { key: 'results', label: 'Results', path: '/results' },
-] as const;
+import { steps } from '../lib/dataAnnotation';
 
 export default function Topbar() {
   const location = useLocation();

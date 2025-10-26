@@ -7,7 +7,6 @@ This repository hosts a full-stack evaluation workspace designed for the Besimpl
 ```
 .
 ├── frontend/             # React + Vite dashboard, hooks, and UI primitives
-│   └── src/legacy/       # Archived entry points preserved during cleanup
 └── server/               # FastAPI application, worker, and service layer
 ```
 
@@ -191,4 +190,3 @@ classDiagram
 - Guarded queue and results effects against stale updates while continuing to run all network calls through the shared `safeAsync` helper.
 - Updated the worker service to fetch-before-insert, keeping evaluation writes idempotent without hammering Supabase.
 - Added a post-run countdown in the queue view so operators can read the final status before the app navigates to results.
-- Captured the pre-change runner service in `runner_service.py.bak` for a fast rollback path.

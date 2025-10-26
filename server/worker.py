@@ -16,10 +16,10 @@ from app.services.runner_service import run_ai_judge_job
 
 load_dotenv()
 
-CONCURRENCY = int(os.getenv("WORKER_CONCURRENCY", "4"))
-BATCH_SIZE = int(os.getenv("WORKER_BATCH", "10"))
-POLL_INTERVAL = float(os.getenv("WORKER_POLL_INTERVAL", "5.0"))
-JUDGES_REFRESH = int(os.getenv("WORKER_JUDGE_REFRESH", "60"))
+CONCURRENCY = 4
+BATCH_SIZE = 10
+POLL_INTERVAL = 5.0
+JUDGES_REFRESH = 60
 
 def should_retry(exc: Exception) -> bool:
     err_str = str(exc).lower()

@@ -6,13 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Loading } from '../components/ui/Loading';
-
-const metrics = [
-    { key: 'submissions', label: 'Submissions' },
-    { key: 'judges', label: 'Active Judges' },
-    { key: 'evaluations', label: 'Evaluations' },
-    { key: 'pass_rate', label: 'Pass Rate', suffix: '%' },
-] as const;
+import { metrics } from '../lib/dataAnnotation';
 
 export default function DashboardPage() {
     const { setCurrentStep, markCompleted } = useWorkflow();
