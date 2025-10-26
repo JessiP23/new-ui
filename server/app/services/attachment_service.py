@@ -1,1 +1,0 @@
-# Deprecated: Attachment handling has been removed from the system.

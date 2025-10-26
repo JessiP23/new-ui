@@ -89,6 +89,10 @@ def _resolve_provider(provider: Optional[str], model: Optional[str]) -> Optional
         return prov
     return inferred
 
+
+def resolve_provider(provider: Optional[str], model: Optional[str]) -> Optional[str]:
+    return _resolve_provider(provider, model)
+
 async def _call_provider(
     provider: str,
     clients: Dict[str, Any],

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '../lib/api';
 import { safeAsync } from '../utils/safeAsync';
-import type { Assignment, Judge, JobStatusCounts } from '../types';
+import type { Assignment, Judge } from '../types';
 
 type SelectedJudgesMap = Record<string, string[]>;
 
@@ -161,29 +161,6 @@ export function useQueue(queueId?: string) {
     setAssignmentsSaved(false);
   }, []);
 
-  const fetchJobStatus = useCallback(async (): Promise<JobStatusCounts> => {
-    if (!queueId) {
-      return { pending: 0, running: 0, done: 0, failed: 0, total: 0 };
-    }
-    const { data, error: requestError } = await safeAsync(() =>
-      apiClient.get<{ counts: Record<string, number>; total: number }>(
-        `/diagnostics/job_status?queue_id=${queueId}`,
-      ),
-    );
-    if (requestError) {
-      console.error(requestError);
-      return { pending: 0, running: 0, done: 0, failed: 0, total: 0 };
-    }
-    const counts = data?.data.counts ?? {};
-    return {
-      pending: counts.pending ?? 0,
-      running: counts.running ?? 0,
-      done: counts.done ?? 0,
-      failed: counts.failed ?? 0,
-      total: data?.data.total ?? 0,
-    };
-  }, [queueId]);
-
   return {
     queueReady: Boolean(queueId),
     questions,
@@ -194,7 +171,6 @@ export function useQueue(queueId?: string) {
     toggleJudge,
     saveAssignments,
     refreshQuestions: fetchQuestions,
-    fetchJobStatus,
     assignmentsSaved,
     assignmentSummary,
   };

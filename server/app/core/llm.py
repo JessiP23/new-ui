@@ -7,10 +7,10 @@ from anthropic import AsyncAnthropic
 import google.generativeai as genai
 
 @lru_cache
-def get_groq_client() -> AsyncGroq:
+def get_groq_client() -> Optional[AsyncGroq]:
     api_key: Optional[str] = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("GROQ_API_KEY environment variable is not set")
+        return None
     return AsyncGroq(api_key=api_key)
 
 @lru_cache

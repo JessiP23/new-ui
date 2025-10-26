@@ -1,6 +1,71 @@
-# System architecture and scaling notes
+# AI Judge platform
 
-## High-level overview
+## What's new in this iteration
+- Multi-queue queue management with bulk run support and redirect countdown for smooth end-to-end workflows (`frontend/src/pages/QueuePage.tsx`, `frontend/src/hooks/useRunner.ts`).
+- Live diagnostics via SSE with polling fallback to track job progress without refreshing the page (`/diagnostics/live_job_status`, `useRunner`).
+- Judge analytics dashboards with rankings, timelines, and interactive filters (`frontend/src/components/dashboard/JudgeAnalyticsSection.tsx`, `frontend/src/hooks/useAnalytics.ts`).
+- Upload helper modal, drag-and-drop ingestion, and queue summarisation to validate payloads before submission (`UploadPage`, `useUpload`).
+- Reasoning simhash + bucketting for dedupe-friendly analytics and safer replays (`server/app/api/routes/submissions.py`, `runner_service`).
+
+## Coding challenge coverage
+| Requirement | Status | Key implementation |
+| --- | --- | --- |
+| Ingest JSON submissions | **Done** | `UploadPage`, `server/app/api/routes/submissions.py`, simhash dedupe |
+| Judge CRUD | **Done** | `JudgesPage`, `server/app/api/routes/judges.py` |
+| Assign judges to questions | **Done** | `QueuePage`, `useQueue`, `server/app/api/routes/queue.py` |
+| Run evaluations via worker | **Done** | `useRunner`, `server/app/services/queue_service.py`, `worker.py` |
+| Persist verdicts & reasoning | **Done** | `runner_service`, `judge_service`, Supabase `evaluations` table |
+| Results browsing & filters | **Done** | `ResultsPage`, `useResults`, `server/app/api/routes/evaluations.py` |
+| Analytics & insights | **Done** | `DashboardPage`, `useAnalytics`, `analytics_service` |
+
+## Local development
+### Prerequisites
+- Python 3.11+ (project currently runs on 3.13 via local venv)
+- Node.js 20+
+- Supabase project (URL + service key) and optional LLM provider API keys (Groq, OpenAI, Anthropic, Gemini)
+
+### Backend API
+```bash
+cd server
+python3 -m venv .venv
+source .venv/bin/activate
+pip install fastapi "uvicorn[standard]" supabase python-dotenv backoff groq openai anthropic google-generativeai
+touch .env  # populate SUPABASE_URL, SUPABASE_KEY, provider keys
+uvicorn main:app --reload
+```
+
+### Async worker
+```bash
+cd server
+source .venv/bin/activate
+python worker.py
+```
+
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Verification steps
+1. **Static checks** – `npm run lint` (frontend) and `npm run build` for type-safety; `pytest` (backend tests) or `python -m compileall app` for import sanity.
+2. **End-to-end smoke test** – Upload sample JSON, assign judges, run a queue, confirm countdown redirect to results.
+3. **Analytics sanity** – Load dashboard, adjust timeframe/interval, ensure charts respond and rankings update.
+4. **Worker resilience** – Start worker without Groq credentials; it now skips Groq while continuing with other providers.
+
+## Time & tradeoffs
+- **Time spent:** `<add total>`
+- **Key tradeoffs:** stayed on Supabase/Postgres for both OLTP + analytics; kept polling worker for determinism; frontend hooks favour explicit async control over additional libraries (e.g., React Query).
+- **Rollback plan:**
+  - Restore strict Groq requirement by reverting `get_groq_client` to raise when `GROQ_API_KEY` is unset.
+  - Re-add `attachment_service.py` if attachment uploads return; ensure corresponding routes are reinstated.
+
+---
+
+## System architecture and scaling notes
+
+### High-level overview
 
 The platform delivers a JSON-first evaluation workflow:
 
@@ -10,7 +75,7 @@ The platform delivers a JSON-first evaluation workflow:
 4. A background worker dequeues jobs, calls external LLM providers, and persists evaluations.
 5. The frontend surfaces live queue progress and results via the same REST API.
 
-## Architecture diagram
+### Architecture diagram
 
 ```mermaid
 graph TD
@@ -48,7 +113,7 @@ graph TD
     A -->|Aggregated metrics| S
 ```
 
-## Component responsibilities
+### Component responsibilities
 
 - **React frontend**
   - Handles JSON ingestion, judge configuration, queue management, and analytics.
@@ -71,7 +136,7 @@ graph TD
 - **LLM providers**
   - External services invoked by the worker. Providers are resolved dynamically from judge configs.
 
-## Data flow summary
+### Data flow summary
 
 1. **Upload** – `/submissions` validates JSON; simhash buckets are computed for deduplication.
 2. **Assign judges** – `/queue/assignments` stores per-question judge lists and exposes summaries. When uploads span multiple `queueId` values, the UI surfaces each queue so judges can be assigned per cohort.
@@ -79,14 +144,14 @@ graph TD
 4. **Process jobs** – Worker polls jobs, calls providers, and writes evaluations + simhash for reasoning text.
 5. **Review results** – `/evaluations` returns paginated evaluations with filter support; analytics endpoints reuse the same source tables.
 
-## Current trade-offs
+### Current trade-offs
 
 - **Single Postgres tenant** – All workloads (ingest, jobs, analytics) share the Supabase instance. This simplifies operations but makes IO contention more likely under high load.
 - **Polling worker** – The worker polls Supabase rather than reacting to push events. Polling is simple but wastes cycles when the queue is idle and introduces latency between enqueue and execution.
 - **Service-role credentials** – The backend relies on Supabase’s service key. Compromise of the API server would expose full DB access; rotate keys regularly and gate deployment.
 - **Synchronous ingestion** – `/submissions` performs batched upserts inline. Large payloads may increase request latency, though batching mitigates per-insert overhead.
 
-## Scaling options
+### Scaling options
 
 | Layer | Scale-up strategy | Notes |
 | --- | --- | --- |
@@ -96,7 +161,7 @@ graph TD
 | Database | Use Supabase connection pooling, add indexes on `judge_jobs(queue_id, status)` and `evaluations(queue_id, judge_id)`. Partition submissions/evaluations by queue for very large datasets. | Monitor write amplification from frequent upserts. |
 | Observability | Add structured logging and metrics for queue depth, eval throughput, and provider latency. | Enables autoscaling triggers and capacity planning. |
 
-## Future improvements
+### Future improvements
 
 - Swap polling for event-driven tasks (Supabase Functions or a queue broker) to reduce latency.
 - Implement per-provider rate limiting and exponential backoff at the worker level.
