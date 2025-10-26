@@ -24,6 +24,6 @@
 - `npm run build` (frontend)
 
 ## Trade-offs & follow-ups
-- Attachments, prompt field toggles, and analytics charts remain documented TODOs (see README) because they require schema or design expansions.
+- Prompt field toggles and richer analytics visualisations remain documented TODOs (see README) because they require schema or design expansions.
 - Monitoring still leans on Supabase polling fallback; introducing WebSocket/SQS infrastructure would harden production readiness.
 - Consider adding unit tests for `evaluation_service` filters using Supabase mocks when time allows.

@@ -65,7 +65,6 @@ PROVIDERS: Dict[str, ProviderCall] = {
 PROMPT_TEMPLATE = (
     "{system_prompt}\n\n"
     "Question: {question_text}\n\n"
-    "{attachments_section}"
     "Answer: {answer_text}\n\n"
     "Response ONLY with a Json object: {{\"verdict\":\"pass|fail|inconclusive\",\"reasoning\":\"...\"}}\n"
 )
@@ -149,23 +148,9 @@ async def run_single_judge(
         return None
 
     answer_text = ' '.join(str(value) for value in answer.values())
-    attachments = submission_data.get('attachments') if isinstance(submission_data, dict) else None
-    attachments_section = ''
-    if isinstance(attachments, list) and attachments:
-        attachment_lines = []
-        for attachment in attachments:
-            if not isinstance(attachment, dict):
-                continue
-            name = attachment.get('filename') or 'Attachment'
-            url = attachment.get('url') or ''
-            attachment_lines.append(f"- {name}: {url}")
-        if attachment_lines:
-            attachments_section = "Attachments (signed URLs):\n" + "\n".join(attachment_lines) + "\n\n"
-
     prompt = PROMPT_TEMPLATE.format(
         system_prompt=judge.get('system_prompt', ''),
         question_text=question.get('questionText') or question.get('question_text') or question.get('text') or str(question),
-        attachments_section=attachments_section,
         answer_text=answer_text,
     )
 

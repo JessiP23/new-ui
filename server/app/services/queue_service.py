@@ -82,7 +82,7 @@ def enqueue_judge_jobs(queue_id: str, supabase: Client, settings: Settings) -> D
     while True:
         subs_resp = (
             supabase.table("submissions")
-            .select("id,data,attachments")
+            .select("id,data")
             .eq("queue_id", queue_id)
             .range(offset, offset + settings.run_judges_page - 1)
             .execute()
@@ -97,9 +97,6 @@ def enqueue_judge_jobs(queue_id: str, supabase: Client, settings: Settings) -> D
                 sub_data = json.loads(row.get("data") or "{}")
             except Exception:
                 continue
-            attachments = row.get("attachments") or []
-            if attachments and isinstance(sub_data, dict):
-                sub_data["attachments"] = attachments
             for assign in assignments:
                 qid = assign["question_id"]
                 if not _submission_contains_question(sub_data, qid):

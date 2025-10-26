@@ -1,12 +1,6 @@
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
-class Attachment(BaseModel):
-    id: str
-    filename: str
-    url: str
-    content_type: Optional[str] = None
-
 class Question(BaseModel):
     data: Dict[str, Any]
 
@@ -17,7 +11,6 @@ class Submission(BaseModel):
     createdAt: int
     questions: List[Question]
     answers: Dict[str, Dict[str, Any]]
-    attachments: Optional[List[Attachment]] = None
 
 class Judge(BaseModel):
     id: str = None

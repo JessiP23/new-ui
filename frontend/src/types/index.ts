@@ -11,14 +11,6 @@ export interface Submission {
   createdAt: number;
   questions: SubmissionQuestion[];
   answers: Record<string, Record<string, unknown>>;
-  attachments?: AttachmentMetadata[];
-}
-
-export interface AttachmentMetadata {
-  id: string;
-  filename: string;
-  url: string;
-  content_type?: string | null;
 }
 
 export interface Judge {

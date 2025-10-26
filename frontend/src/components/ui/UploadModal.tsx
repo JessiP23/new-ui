@@ -1,6 +1,3 @@
-import { useDropzone } from 'react-dropzone';
-
-import { cn } from '../../lib/cn';
 import { Button } from './Button';
 
 interface UploadModalProps {
@@ -11,17 +8,7 @@ interface UploadModalProps {
     description?: string;
 }
 
-export function UploadModal({ open, onClose, onFileAccepted, title = 'Upload Submissions', description }: UploadModalProps) {
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        accept: { 'application/json': ['.json'] },
-        onDropAccepted: async (files) => {
-            const file = files[0];
-            const text = await file.text();
-            onFileAccepted(text);
-            onClose();
-        },
-    });
-
+export function UploadModal({ open, onClose, title = 'Upload Submissions', description }: UploadModalProps) {
     if (!open) return null;
 
     return (
@@ -35,19 +22,6 @@ export function UploadModal({ open, onClose, onFileAccepted, title = 'Upload Sub
                     <Button variant="ghost" size="sm" onClick={onClose}>
                         Close
                     </Button>
-                </div>
-
-                <div
-                    {...getRootProps()}
-                    className={cn(
-                        'mb-4 flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center transition-colors',
-                        isDragActive && 'border-indigo-500 bg-indigo-50/50 text-indigo-600',
-                    )}
-                >
-                    <input {...getInputProps()} />
-                    <p className="text-sm text-slate-600">
-                        {isDragActive ? 'Drop the JSON file here...' : 'Drag & drop a JSON file, or click to browse'}
-                    </p>
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
