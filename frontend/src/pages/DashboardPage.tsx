@@ -13,7 +13,7 @@ import { metrics } from '../lib/dataAnnotation';
 import { coerceInterval, timeframeToSeconds, type AnalyticsInterval, type AnalyticsTimeframe } from '../constants/analytics';
 
 export default function DashboardPage() {
-    const { setCurrentStep, markCompleted, lastQueueId, setLastQueueId } = useWorkflow();
+    const { setCurrentStep, markCompleted, lastQueueId, setLastQueueId, setQueueIds } = useWorkflow();
     const { data, loading, error, refresh } = useDashboard();
     const [timeframe, setTimeframe] = useState<AnalyticsTimeframe>('all');
     const [interval, setInterval] = useState<AnalyticsInterval>('week');
@@ -42,10 +42,12 @@ export default function DashboardPage() {
 
     useEffect(() => {
         if (!queues.length) {
+            setQueueIds([]);
             return;
         }
 
         const queueIds = queues.map((queue) => queue.queue_id);
+        setQueueIds(queueIds);
         const hasLastQueue = lastQueueId && queueIds.includes(lastQueueId);
 
         if (lastQueueId && !hasLastQueue) {
@@ -75,7 +77,7 @@ export default function DashboardPage() {
                 }
             }
         }
-    }, [queues, lastQueueId, selectedQueue, setLastQueueId]);
+    }, [queues, lastQueueId, selectedQueue, setLastQueueId, setQueueIds]);
 
     useEffect(() => {
         if (lastQueueId) {

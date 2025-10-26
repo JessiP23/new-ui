@@ -58,10 +58,15 @@ async def upload_submissions(data: List[dict]):
     settings = get_settings()
 
     total = 0
+    queue_ids = set()
     batch: List[dict] = []
 
     for item in data:
-        batch.append(_build_submission_record(item))
+        record = _build_submission_record(item)
+        queue_value = record.get("queue_id")
+        if queue_value:
+            queue_ids.add(queue_value)
+        batch.append(record)
         if len(batch) >= settings.upload_batch_size:
             try:
                 supabase.table("submissions").upsert(batch, on_conflict="id").execute()
@@ -77,8 +82,14 @@ async def upload_submissions(data: List[dict]):
         except Exception as exc:
             raise HTTPException(status_code=500, detail="Failed to upload submissions (final batch)") from exc
 
-    return {"message": f"Uploaded {total} submissions"}
-    
-@router.post("/upload", include_in_schema=False)
-async def legacy_upload(data: List[dict]):
-    return await upload_submissions(data)
+    if total:
+        print(
+            f"[upload_submissions] Inserted {total} submissions across queues: {sorted(queue_ids)}",
+            flush=True,
+        )
+
+    return {
+        "message": f"Uploaded {total} submissions",
+        "queue_ids": sorted(queue_ids),
+        "total": total,
+    }

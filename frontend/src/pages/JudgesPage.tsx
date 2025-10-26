@@ -28,7 +28,7 @@ const defaultForm: JudgeFormState = {
 
 export default function JudgesPage() {
     const navigate = useNavigate();
-    const { setCurrentStep, markCompleted, lastQueueId } = useWorkflow();
+    const { setCurrentStep, markCompleted, lastQueueId, queueIds } = useWorkflow();
     const { judges, loading, error, createJudge, updateJudge, deleteJudge } = useJudges();
     const [form, setForm] = useState<JudgeFormState>(defaultForm);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -94,7 +94,12 @@ export default function JudgesPage() {
                 <div>
                     <h1 className="text-2xl font-semibold text-slate-900">AI judges</h1>
                     <p className="text-sm text-slate-500">
-                        Configure prompts and models for each evaluation persona.{lastQueueId ? ` Last upload queue: ${lastQueueId}` : ''}
+                        Configure prompts and models for each evaluation persona.
+                        {queueIds.length
+                            ? ` Recent upload queues: ${queueIds.join(', ')}`
+                            : lastQueueId
+                                ? ` Last upload queue: ${lastQueueId}`
+                                : ''}
                     </p>
                 </div>
                 <Button

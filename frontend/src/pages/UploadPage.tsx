@@ -11,7 +11,7 @@ import { useUpload } from '../hooks/useUpload';
 
 export default function UploadPage() {
     const navigate = useNavigate();
-    const { setCurrentStep, markCompleted, setLastQueueId } = useWorkflow();
+    const { setCurrentStep, markCompleted, setLastQueueId, setQueueIds } = useWorkflow();
     const [modalOpen, setModalOpen] = useState(false);
 
     useEffect(() => {
@@ -26,8 +26,9 @@ export default function UploadPage() {
         onDrop,
         handleJsonSubmit,
     } = useUpload({
-        onComplete: (queueId) => {
-            setLastQueueId(queueId);
+        onComplete: ({ queueIds }) => {
+            setQueueIds(queueIds);
+            setLastQueueId(queueIds[0] ?? '');
             markCompleted('upload');
             setCurrentStep('judges');
             navigate('/judges');
@@ -40,7 +41,11 @@ export default function UploadPage() {
         try {
             const parsed = JSON.parse(jsonText);
             if (!Array.isArray(parsed)) return 'Expected a JSON array of submissions.';
-            return `Ready to upload ${parsed.length} submissions.`;
+            const queueIds = Array.from(new Set(parsed.map((item) => item?.queueId).filter(Boolean)));
+            const queueSummary = queueIds.length === 1
+                ? `queue ${queueIds[0]}`
+                : `${queueIds.length} queues (${queueIds.slice(0, 3).join(', ')}${queueIds.length > 3 ? ', …' : ''})`;
+            return `Ready to upload ${parsed.length} submissions across ${queueSummary}.`;
         } catch (error) {
             return error instanceof Error ? `Invalid JSON: ${error.message}` : 'Invalid JSON input.';
         }

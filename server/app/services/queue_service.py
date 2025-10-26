@@ -73,6 +73,7 @@ def enqueue_judge_jobs(queue_id: str, supabase: Client, settings: Settings) -> D
     assigns_resp = supabase.table("assignments").select("question_id, judge_id").eq("queue_id", queue_id).execute()
     assignments = assigns_resp.data or []
     if not assignments:
+        print(f"[enqueue_judge_jobs] queue={queue_id} has no assignments; skipping job enqueue", flush=True)
         return {"message": "No assignments found for queue", "enqueued": 0}
 
     total_enqueued = 0
@@ -104,13 +105,28 @@ def enqueue_judge_jobs(queue_id: str, supabase: Client, settings: Settings) -> D
                 job = _build_job(sub_id, sub_data, qid, str(assign["judge_id"]), queue_id)
                 jobs_batch.append(job)
                 if len(jobs_batch) >= settings.job_batch_size:
-                    total_enqueued += _flush_jobs(supabase, jobs_batch)
+                    flushed = _flush_jobs(supabase, jobs_batch)
+                    total_enqueued += flushed
+                    print(
+                        f"[enqueue_judge_jobs] queue={queue_id} flushed {flushed} jobs (running total={total_enqueued})",
+                        flush=True,
+                    )
                     jobs_batch = []
 
         offset += settings.run_judges_page
 
     if jobs_batch:
-        total_enqueued += _flush_jobs(supabase, jobs_batch)
+        flushed = _flush_jobs(supabase, jobs_batch)
+        total_enqueued += flushed
+        print(
+            f"[enqueue_judge_jobs] queue={queue_id} flushed final batch of {flushed} jobs (total={total_enqueued})",
+            flush=True,
+        )
+
+    print(
+        f"[enqueue_judge_jobs] queue={queue_id} summary — submissions={_count_records(supabase, 'submissions', queue_id)} assignments={len(assignments)} enqueued={total_enqueued}",
+        flush=True,
+    )
 
     return {
         "message": "Jobs enqueued",

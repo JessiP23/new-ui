@@ -9,6 +9,8 @@ export interface WorkflowContextValue {
     markCompleted: (step: WorkflowStep) => void;
     lastQueueId: string;
     setLastQueueId: (id: string) => void;
+    queueIds: string[];
+    setQueueIds: (ids: string[]) => void;
 }
 
 export const WorkflowContext = createContext<WorkflowContextValue | undefined>(undefined);

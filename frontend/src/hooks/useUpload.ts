@@ -2,8 +2,14 @@ import { useState } from 'react';
 import { apiClient } from '../lib/api';
 import type { Submission } from '../types';
 
+interface UploadCompletePayload {
+  queueIds: string[];
+  total: number;
+  message: string;
+}
+
 interface UseUploadOptions {
-  onComplete?: (queueId: string, message: string) => void;
+  onComplete?: (payload: UploadCompletePayload) => void;
 }
 
 interface UploadState {
@@ -56,19 +62,29 @@ export function useUpload(options?: UseUploadOptions) {
       if (parsed.length === 0) {
         throw new Error('Array cannot be empty.');
       }
-      const [first] = parsed;
-      if (!first?.queueId) {
-        throw new Error('First submission must include a queueId field.');
+      const queueIds = Array.from(
+        new Set(
+          parsed
+            .map((item) => item?.queueId)
+            .filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
+        ),
+      );
+
+      if (!queueIds.length) {
+        throw new Error('Every submission must include a non-empty queueId field.');
       }
 
       const response = await apiClient.post('/submissions', parsed);
-      const queueId: string = first.queueId;
       const message: string = response.data?.message ?? `Uploaded ${parsed.length} submissions`;
+      const returnedQueues = Array.isArray(response.data?.queue_ids)
+        ? (response.data.queue_ids as string[]).filter((value) => typeof value === 'string' && value.trim().length > 0)
+        : queueIds;
+      const uploadedTotal = typeof response.data?.total === 'number' ? response.data.total : parsed.length;
       setState((prev) => ({
         ...prev,
         message,
       }));
-      options?.onComplete?.(queueId, message);
+      options?.onComplete?.({ queueIds: returnedQueues, total: uploadedTotal, message });
     } catch (error: unknown) {
       const detail = deriveErrorMessage(error);
       setState((prev) => ({ ...prev, message: `Upload failed: ${detail}` }));

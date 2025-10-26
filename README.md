@@ -53,7 +53,7 @@ graph TD
 - **React frontend**
   - Handles JSON ingestion, judge configuration, queue management, and analytics.
   - Uses React Query-style hooks (custom) for API access; Axios client configured via `VITE_API_URL`.
-  - Workflow context tracks the user’s current wizard step and last queue ID.
+  - Workflow context tracks the user’s current wizard step, remembers the active queue, and now retains the full queue list from the latest upload for multi-queue runs.
 
 - **FastAPI backend**
   - Receives JSON submissions in batches and performs idempotent upserts.
@@ -74,8 +74,8 @@ graph TD
 ## Data flow summary
 
 1. **Upload** – `/submissions` validates JSON; simhash buckets are computed for deduplication.
-2. **Assign judges** – `/queue/assignments` stores per-question judge lists and exposes summaries.
-3. **Run queue** – `/queue/run` seeds jobs by slicing submissions in batches, respecting configured page size/batch size.
+2. **Assign judges** – `/queue/assignments` stores per-question judge lists and exposes summaries. When uploads span multiple `queueId` values, the UI surfaces each queue so judges can be assigned per cohort.
+3. **Run queue** – `/queue/run` seeds jobs by slicing submissions in batches, respecting configured page size/batch size. Operators can now switch between queues inside the UI before running each one, ensuring every submission batch is evaluated.
 4. **Process jobs** – Worker polls jobs, calls providers, and writes evaluations + simhash for reasoning text.
 5. **Review results** – `/evaluations` returns paginated evaluations with filter support; analytics endpoints reuse the same source tables.
 
