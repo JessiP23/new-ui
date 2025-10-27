@@ -35,7 +35,7 @@ def should_retry(exc: Exception) -> bool:
 async def process_job(job: Dict[str, Any], judges_map: Dict[str, Dict[str, Any]]):
     supabase = get_supabase_client()
     provider_clients = {
-        "groq": get_groq_client(),
+        "llama": get_groq_client(),
         "openai": get_openai_client(),
         "anthropic": get_anthropic_client(),
         "gemini": get_gemini_client(),

@@ -149,7 +149,8 @@ graph TD
 - **Single Postgres tenant** – All workloads (ingest, jobs, analytics) share the Supabase instance. This simplifies operations but makes IO contention more likely under high load.
 - **Polling worker** – The worker polls Supabase rather than reacting to push events. Polling is simple but wastes cycles when the queue is idle and introduces latency between enqueue and execution.
 - **Service-role credentials** – The backend relies on Supabase’s service key. Compromise of the API server would expose full DB access; rotate keys regularly and gate deployment.
-- **Synchronous ingestion** – `/submissions` performs batched upserts inline. Large payloads may increase request latency, though batching mitigates per-insert overhead.
+- **Synchronous ingestion** – `/submissions` performs batched UPSERTs inline; very large batches increase client latency because the API waits for DB writes to finish.
+- **Mitigation** – prefer chunked uploads or an async ingestion path (202 + background worker) for very large datasets to reduce timeouts and worker contention.
 
 ### Scaling options
 

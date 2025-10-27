@@ -49,8 +49,28 @@ def fetch_evaluations(
         pass_count = pass_response.count or 0
     pass_rate = round((pass_count / total) * 100, 1) if total else 0.0
 
+    rows = response.data or []
+
+    judge_ids = sorted({r.get("judge_id") for r in rows if r.get("judge_id")})
+    judge_map: Dict[str, str] = {}
+    if judge_ids:
+        try:
+            jresp = supabase.table("judges").select("id, name").in_("id", judge_ids).execute()
+            for j in jresp.data or []:
+                judge_map[str(j.get("id"))] = j.get("name")
+        except Exception:
+            judge_map = {}
+
+    enriched = []
+    for r in rows:
+        jr = dict(r)
+        jid = jr.get("judge_id")
+        if jid and jid in judge_map:
+            jr.setdefault("judges", {}).update({"name": judge_map[jid]})
+        enriched.append(jr)
+
     return {
-        "evaluations": response.data,
+        "evaluations": enriched,
         "total": total,
         "pass_count": pass_count,
         "pass_rate": pass_rate,

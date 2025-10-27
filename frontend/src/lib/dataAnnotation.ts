@@ -26,7 +26,7 @@ export const promptTemplates = [
 ] as const;
 
 export const modelOptions: Record<string, Array<{ value: string; label: string }>> = {
-    groq: [
+    llama: [
         { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile' },
         { value: 'llama3-70b-8192', label: 'Llama 3 70B' },
         { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant' },

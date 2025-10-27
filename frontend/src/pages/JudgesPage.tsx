@@ -23,7 +23,7 @@ const defaultForm: JudgeFormState = {
     system_prompt: '',
     model: 'llama-3.1-8b-instant',
     active: true,
-    provider: 'groq',
+    provider: 'llama',
 };
 
 export default function JudgesPage() {
@@ -54,7 +54,7 @@ export default function JudgesPage() {
             system_prompt: judge.system_prompt,
             model: judge.model,
             active: judge.active,
-            provider: judge.provider ?? 'groq',
+            provider: judge.provider ?? 'llama',
         });
         setEditingId(judge.id);
     };
@@ -143,7 +143,7 @@ export default function JudgesPage() {
                                     }}
                                     className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none"
                                 >
-                                    <option value="groq">Groq</option>
+                                    <option value="llama">Llama</option>
                                     <option value="openai">OpenAI</option>
                                     <option value="anthropic">Anthropic</option>
                                     <option value="gemini">Gemini</option>
