@@ -20,7 +20,7 @@ export function useQueue(queueId?: string) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [assignmentsSaved, setAssignmentsSaved] = useState<boolean>(false);
-  const [assignmentSummary, setAssignmentSummary] = useState<AssignmentSummary | null>(null); // REFACTORED by GPT-5 — preserve backend summary details
+  const [assignmentSummary, setAssignmentSummary] = useState<AssignmentSummary | null>(null);
   const lastLoadedQueueRef = useRef<string | null>(null);
 
   const fetchJudges = useCallback(async () => {
@@ -97,7 +97,7 @@ export function useQueue(queueId?: string) {
       setQuestions([]);
       setSelectedJudges({});
       setAssignmentsSaved(false);
-      setAssignmentSummary(null); // REFACTORED by GPT-5 — reset summary when queue changes
+      setAssignmentSummary(null);
       return;
     }
 
@@ -127,11 +127,18 @@ export function useQueue(queueId?: string) {
       }, []);
     });
 
+    if (payload.length === 0) {
+      setError('Select at least one judge before saving assignments');
+      setAssignmentsSaved(false);
+      setAssignmentSummary(null);
+      return;
+    }
+
     const { data: response, error: requestError } = await safeAsync(() => apiClient.post('/queue/assignments', payload));
     if (requestError) {
       console.error(requestError);
       setError('Failed to save assignments');
-      setAssignmentSummary(null); // REFACTORED by GPT-5 — clear summary on failure
+      setAssignmentSummary(null);
       return;
     }
 

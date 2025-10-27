@@ -30,7 +30,7 @@ def fetch_evaluations(
             return {"evaluations": [], "total": 0, "pass_count": 0, "pass_rate": 0.0}
 
     query = supabase.table("evaluations").select("*", count="exact")
-    query = _apply_filters(query, submission_ids, judge_ids, question_ids, verdict)  # REFACTORED by GPT-5 — reuse filters for paginated query
+    query = _apply_filters(query, submission_ids, judge_ids, question_ids, verdict) 
 
     offset = (page - 1) * limit
     response = query.range(offset, offset + limit - 1).execute()
@@ -39,12 +39,12 @@ def fetch_evaluations(
 
     total = response.count or 0
     if verdict and verdict != "pass":
-        pass_count = 0  # REFACTORED by GPT-5 — verdict filter excludes pass rows
+        pass_count = 0
     elif verdict == "pass":
-        pass_count = total  # REFACTORED by GPT-5 — all paginated rows are pass verdicts
+        pass_count = total
     else:
         pass_query = supabase.table("evaluations").select("id", count="exact")
-        pass_query = _apply_filters(pass_query, submission_ids, judge_ids, question_ids, verdict=None)  # REFACTORED by GPT-5 — aggregate pass count across filters
+        pass_query = _apply_filters(pass_query, submission_ids, judge_ids, question_ids, verdict=None)
         pass_response = pass_query.eq("verdict", "pass").execute()
         pass_count = pass_response.count or 0
     pass_rate = round((pass_count / total) * 100, 1) if total else 0.0

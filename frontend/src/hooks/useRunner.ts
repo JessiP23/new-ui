@@ -67,7 +67,7 @@ export function useRunner(queueId?: string) {
     const applyCounts = useCallback((counts: JobStatusCounts, message?: string, completed?: number) => {
             const progress = computeProgress(counts);
             const isComplete = counts.total > 0 && counts.pending + counts.running === 0;
-            const completedEvaluations = completed ?? counts.done + counts.failed; // REFACTORED by GPT-5 — surface completed evals when available
+            const completedEvaluations = completed ?? counts.done + counts.failed;
             setState((prev) => ({
                 ...prev,
                 counts,
@@ -173,7 +173,7 @@ export function useRunner(queueId?: string) {
         }
 
         const enqueued = data?.data?.enqueued ?? 0;
-        const expectedEvaluations = data?.data?.expected_evaluations ?? enqueued; // REFACTORED by GPT-5 — align UI with backend expectations
+        const expectedEvaluations = data?.data?.expected_evaluations ?? enqueued;
         if (enqueued === 0) {
             setState({
                 running: false,

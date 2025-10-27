@@ -25,7 +25,7 @@ export function useResults() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [total, setTotal] = useState<number>(0);
-  const [passCount, setPassCount] = useState<number>(0); // REFACTORED by GPT-5 — track aggregate pass results
+  const [passCount, setPassCount] = useState<number>(0);
   const [judges, setJudges] = useState<Judge[]>([]);
   const [questions, setQuestions] = useState<string[]>([]);
 

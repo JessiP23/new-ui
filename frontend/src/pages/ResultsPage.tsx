@@ -42,7 +42,7 @@ export default function ResultsPage() {
         setFiltersInternal((prev) => (filtersEqual(prev, parsedFilters) ? prev : { ...prev, ...parsedFilters }));
     }, [parsedFilters, setFiltersInternal]);
 
-    const passRate = total ? ((passCount / total) * 100).toFixed(1) : '0.0'; // REFACTORED by GPT-5 — use aggregate counts from backend
+    const passRate = total ? ((passCount / total) * 100).toFixed(1) : '0.0';
 
     const columns: TableColumn<Evaluation>[] = [
         { key: 'submission_id', header: 'Submission' },

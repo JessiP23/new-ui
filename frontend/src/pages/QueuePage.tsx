@@ -452,7 +452,7 @@ export default function QueuePage() {
                                         <strong>{assignmentSummary.expected_evaluations}</strong> planned evaluations
                                     </p>
                                 </div>
-                            ) : null /* REFACTORED by GPT-5 — surface backend summary for clarity */}
+                            ) : null}
                             {counts ? (
                                 <div className="space-y-3 text-sm text-slate-600">
                                     <div className="flex justify-between">
