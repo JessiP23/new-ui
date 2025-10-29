@@ -1,9 +1,11 @@
 import asyncio
 import json
+import logging
 import math
 import os
 import textwrap
 import time
+import traceback
 from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional
 from dedalus_labs import AsyncDedalus, DedalusRunner
@@ -237,13 +239,19 @@ class DedalusOrchestrator:
         if stream:
             run_kwargs["stream"] = stream_async
 
+        logger = logging.getLogger(__name__)
         try:
             response = await asyncio.wait_for(self.runner.run(**run_kwargs), timeout=self.timeout)
         except asyncio.TimeoutError as exc:
+            logger.exception("Dedalus workflow '%s' timed out after %s seconds", task_type, self.timeout)
             raise TimeoutError(f"Dedalus workflow '{task_type}' timed out after {self.timeout}s") from exc
         except Exception as exc:
-            raise RuntimeError(f"Dedalus workflow '{task_type}' failed") from exc
+            # log full traceback and include the underlying message to make the 502 actionable
+            tb = traceback.format_exc()
+            logger.error("Dedalus workflow '%s' failed: %s\n%s", task_type, exc, tb)
+            raise RuntimeError(f"Dedalus workflow '{task_type}' failed: {exc}") from exc
 
+        # preferred: return .final_output if present
         return getattr(response, "final_output", response)
 
     async def _gather_agent_outputs(self, answer: str, tasks: Iterable[str]) -> Dict[str, Any]:
