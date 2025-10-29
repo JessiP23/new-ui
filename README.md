@@ -30,8 +30,22 @@ cd server
 python3 -m venv .venv
 source .venv/bin/activate
 pip install fastapi "uvicorn[standard]" supabase python-dotenv backoff groq openai anthropic google-generativeai
-touch .env  # populate SUPABASE_URL, SUPABASE_KEY, provider keys
+pip install dedalus-labs
+touch .env  # populate SUPABASE_URL, SUPABASE_KEY, DEDALUS_API_KEY, provider keys
 uvicorn main:app --reload
+```
+
+`.env` essentials:
+
+```
+SUPABASE_URL=...
+SUPABASE_KEY=...
+OPENAI_API_KEY=...
+DEDALUS_API_KEY=...
+# Optional tuning overrides
+DEDALUS_MODEL=openai/gpt-5-mini
+DEDALUS_TIMEOUT_SECONDS=90
+JUDGEX_MIN_CONFIDENCE=0.65
 ```
 
 ### Async worker
@@ -47,6 +61,16 @@ cd frontend
 npm install
 npm run dev
 ```
+
+### JudgeX orchestration API
+
+- **POST `/judgex/judge`** → runs the standard multi-agent workflow (evaluation, feedback, reasoning) plus any optional tasks.
+- **POST `/judgex/judge/adaptive`** → adds automatic domain classification and targeted specialist agents (math, clarity, code, moderation).
+- **GET `/judgex/capabilities`** → discover active agents, model defaults, and routing heuristics.
+
+Each POST expects `{ "answer": "...", "mode": "standard|adaptive", "extra_tasks": ["clarity_feedback"], "skip_auto_retry": false }` and returns structured JSON with final verdict, confidence, and per-agent outputs.
+
+The React results page now includes a **JudgeX panel** that lets operators paste any submission, choose optional agents, and run standard vs adaptive workflows without leaving the analytics flow.
 
 ## Verification steps
 1. **Static checks** – `npm run lint` (frontend) and `npm run build` for type-safety; `pytest` (backend tests) or `python -m compileall app` for import sanity.

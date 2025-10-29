@@ -127,3 +127,32 @@ export interface QueueOption {
   created_at?: string;
   evaluation_count?: number;
 }
+
+export type JudgeXMode = 'standard' | 'adaptive';
+
+export interface JudgeXTelemetry {
+  elapsed_ms: number;
+  iterations: number;
+  model: string;
+}
+
+export interface JudgeXCapabilities {
+  default_model: string;
+  timeout_seconds: number;
+  min_confidence: number;
+  base_tasks: string[];
+  optional_tasks: string[];
+  domain_routes: Record<string, string>;
+}
+
+export interface JudgeXResponse {
+  mode: JudgeXMode;
+  domain: string;
+  domain_details?: unknown;
+  agents_called: string[];
+  final_decision?: string | null;
+  confidence?: number | null;
+  agent_outputs: Record<string, unknown>;
+  final: Record<string, unknown>;
+  telemetry: JudgeXTelemetry;
+}

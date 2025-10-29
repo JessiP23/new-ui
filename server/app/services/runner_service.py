@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from supabase import Client
-from app.services.judge_service import run_single_judge
+from app.services.judge_service import run_single_judge, PROMPT_TEMPLATE, _extract_question, _parse_verdict
+from ..core.dedalus_client import DedalusClient
+from app.services.fingerprint_service import simhash
 
 async def run_ai_judge_job(
     job: Dict[str, Any],
@@ -11,14 +13,51 @@ async def run_ai_judge_job(
 ):
     job_id = job["id"]
     try:
-        evaluation = await run_single_judge(
-            submission_id=job["submission_id"],
-            submission_data=job.get("submission_data") or {},
-            question_id=job["question_id"],
-            judge_id=str(job["judge_id"]),
-            provider_clients=provider_clients,
-            judges=judges_map,
-        )
+        judge = judges_map.get(str(job.get("judge_id"))) if judges_map else None
+        evaluation = None
+        if judge and (str(judge.get("provider", "")).lower() == "dedalus" or judge.get("use_dedalus")):
+            submission_data = job.get("submission_data") or {}
+            question = _extract_question(submission_data, job.get("question_id"))
+            if question:
+                answer = submission_data.get("answers", {}).get(job.get("question_id"))
+                if answer:
+                    answer_text = ' '.join(str(value) for value in answer.values())
+                    prompt = PROMPT_TEMPLATE.format(
+                        system_prompt=judge.get('system_prompt', ''),
+                        question_text=question.get('questionText') or question.get('question_text') or question.get('text') or str(question),
+                        answer_text=answer_text,
+                    )
+                    dedalus = DedalusClient()
+                    try:
+                        response = await dedalus.run_agent(input_text=prompt, model=judge.get('model'))
+                        raw = None
+                        if response is None:
+                            raw = None
+                        else:
+                            raw = getattr(response, 'final_output', None) or getattr(response, 'output', None) or str(response)
+                        if raw:
+                            verdict, reasoning = _parse_verdict(raw)
+                            reasoning = reasoning[:1000]
+                            evaluation = {
+                                'submission_id': job['submission_id'],
+                                'question_id': job['question_id'],
+                                'judge_id': str(job['judge_id']),
+                                'verdict': verdict,
+                                'reasoning': reasoning,
+                                'reasoning_simhash': simhash(reasoning),
+                                'created_at': datetime.now(timezone.utc).isoformat(),
+                            }
+                    except Exception as exc:
+                        raise
+        else:
+            evaluation = await run_single_judge(
+                submission_id=job["submission_id"],
+                submission_data=job.get("submission_data") or {},
+                question_id=job["question_id"],
+                judge_id=str(job["judge_id"]),
+                provider_clients=provider_clients,
+                judges=judges_map,
+            )
         if evaluation:
             evaluation.setdefault("queue_id", job.get("queue_id"))
             _upsert_evaluation(supabase, evaluation)

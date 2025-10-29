@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+supabase
+python-dotenv
+backoff
+dedalus-labs
+groq
+openai
+anthropic
+google-generativeai
+httpx
+pydantic

@@ -7,6 +7,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Loading } from '../components/ui/Loading';
 import { Table, type TableColumn } from '../components/ui/Table';
 import { ResultsFiltersBar } from '../components/results/ResultsFiltersBar';
+import { JudgeXPanel } from '../components/results/JudgeXPanel';
 import { useWorkflow } from '../contexts/workflowContext';
 import { useResults } from '../hooks/useResults';
 import type { Evaluation, ResultsFilters } from '../types';
@@ -82,6 +83,8 @@ export default function ResultsPage() {
                 </div>
                 <div className="rounded-full bg-slate-100 px-4 py-1 text-sm text-slate-600">Pass rate: {passRate}% ({passCount} of {total})</div>
             </div>
+
+            <JudgeXPanel />
 
             <ResultsFiltersBar filters={filters} judges={judges} questions={questions} setFilters={setFilters} onClear={handleClearFilters} />
 
